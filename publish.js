@@ -1,0 +1,13 @@
+const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
+
+function publishPage() {
+  shell(`<div style="max-width:820px;margin:auto">${pageTitle("Créer une nouvelle annonce", "Choisissez le type d’annonce et complétez les informations.")}
+  <div class="two-col section"><button class="panel type-choice" data-type="À vendre" style="text-align:left"><span class="eyebrow">À vendre</span><h2>Je souhaite vendre</h2><p>Je souhaite vendre un article, un bien ou un service.</p><span class="btn btn-outline">Choisir</span></button><button class="panel type-choice" data-type="Je recherche" style="text-align:left"><span class="eyebrow">Je recherche</span><h2>Je recherche</h2><p>Je recherche un article, un bien ou un service.</p><span class="btn btn-outline">Choisir</span></button></div>
+  <form id="publish-form" class="panel section"><h2>Informations de l’annonce</h2><div class="field"><label for="ad-title">Titre de l’annonce</label><input id="ad-title" name="title" placeholder="Ex : iPhone 13 en très bon état" minlength="3" maxlength="80" required></div>
+  <div class="two-col"><div class="field"><label>Catégorie</label><select name="category" required><option value="">Sélectionner une catégorie</option>${categories.map(c=>`<option>${c}</option>`).join("")}</select></div><div class="field"><label>Prix en MAD</label><input name="price" type="number" min="1" placeholder="Prix en MAD" required></div></div>
+  <div class="two-col"><div class="field"><label>Localisation</label><select name="city"><option>Tanger</option><option>Tétouan</option><option>Rabat</option><option>Casablanca</option><option>Fès</option><option>Marrakech</option></select></div><div class="field"><label>État</label><select name="condition"><option>Neuf</option><option>Très bon état</option><option>Bon état</option><option>État correct</option></select></div></div>
+  <div class="field"><label>Description</label><textarea name="description" placeholder="Décrivez votre annonce..." required></textarea></div><div class="field"><label for="ad-photo">Photo de l'annonce</label><input id="ad-photo" name="photo" type="file" accept="image/*"><span class="small muted">Choisissez une image pour la preview (max. 1 Mo).</span><div id="photo-preview" class="photo-preview" hidden></div></div>
+  <div class="actions"><button class="btn btn-primary">Publier l’annonce</button><a class="btn btn-outline" href="my-ads.html">Annuler</a></div><p class="small">Votre annonce sera visible publiquement après approbation par l’administrateur.</p></form></div>`);
+}
+
+mountPage("publish", publishPage);
