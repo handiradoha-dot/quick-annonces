@@ -1,0 +1,13 @@
+const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
+
+function demoPage() {
+  const pending = listings.filter(x => x.status === "En attente").length;
+  const approved = listings.filter(x => x.status === "Approuvee").length;
+  shell(`${pageTitle("Visite guidée QuickAnnonces", "Essayez un parcours complet : publier une annonce, puis la traiter comme administrateur.")}
+    <section class="demo-hero"><div><span class="eyebrow">DÉMO INTERACTIVE</span><h2>Tout fonctionne dans ce navigateur</h2><p>Les annonces, favoris, filtres et messages de démonstration restent enregistrés localement sur cet appareil.</p><a class="btn btn-primary" href="publish.html">Commencer par publier</a></div><div class="demo-orbit">Q<span>Démo</span></div></section>
+    <div class="stats"><div class="stat"><strong>${pending}</strong><span>Annonces en attente</span></div><div class="stat"><strong>${approved}</strong><span>Annonces approuvées</span></div><div class="stat"><strong>${state.favorites.size}</strong><span>Favoris enregistrés</span></div><div class="stat"><strong>${state.messages.length}</strong><span>Messages de démo</span></div></div>
+    <div class="demo-steps"><article class="demo-step"><span class="step-number">01</span><div><h3>Publier une annonce</h3><p>Choisissez un type, renseignez les détails et ajoutez une photo pour voir son aperçu.</p><a class="text-link" href="publish.html">Ouvrir le formulaire →</a></div></article><article class="demo-step"><span class="step-number">02</span><div><h3>Vérifier le statut</h3><p>Après l’envoi, l’annonce apparaît dans Mes annonces avec le statut En attente.</p><a class="text-link" href="my-ads.html">Voir mes annonces →</a></div></article><article class="demo-step"><span class="step-number">03</span><div><h3>Examiner côté admin</h3><p>Filtrez ou recherchez les annonces, prévisualisez-les, approuvez-les, refusez-les ou supprimez-les.</p><a class="text-link" href="admin-login.html">Ouvrir la connexion admin →</a></div></article><article class="demo-step"><span class="step-number">04</span><div><h3>Explorer comme client</h3><p>Enregistrez des favoris, filtrez les annonces et testez l’interface de messagerie.</p><a class="text-link" href="search.html">Parcourir les annonces →</a></div></article></div>
+    <div class="notice demo-note"><strong>À savoir :</strong> l’authentification et les données sont simulées. Le stockage local est propre à ce navigateur et ne synchronise rien entre appareils.</div>`, "demo");
+}
+
+mountPage("demo", demoPage);
