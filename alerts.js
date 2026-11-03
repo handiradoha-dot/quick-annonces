@@ -1,0 +1,7 @@
+const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
+
+function alertsPage() {
+  shell(`${pageTitle("Alerte intelligente 🔔", "Ne ratez plus jamais une annonce qui correspond à votre recherche.")}<div class="two-col"><section class="panel"><span class="pill">🔔 Alerte activée</span><h2 class="section">Ordinateur portable pour études</h2><p>Budget ≤ 4 000 DH · 16 Go RAM · Tanger</p><div class="notice success">Nouvelle correspondance !</div><div class="match-row"><div class="mini-visual">💻</div><div><strong>Lenovo ThinkPad</strong><div class="price">3 900 DH</div><div class="meta">96% Match · Publiée il y a 8 min</div></div><a class="text-link" href="detail.html?id=4">Voir l’annonce</a></div></section><section class="panel"><h2>Créer une alerte</h2><form id="alert-form"><div class="field"><label>Recherche</label><input name="query" placeholder="Ex. : ordinateur portable" required></div><div class="field"><label>Budget maximum (DH)</label><input name="budget" type="number" placeholder="4000"></div><div class="field"><label>Ville</label><select name="city"><option>Tanger</option><option>Tétouan</option><option>Rabat</option><option>Casablanca</option></select></div><button class="btn btn-primary">Activer l’alerte</button></form></section></div>`);
+}
+
+mountPage("alerts", alertsPage);

@@ -1,5 +1,1 @@
-/vendor/
-/.env
-/.env.*
-
-config/local.php
+api/config.php

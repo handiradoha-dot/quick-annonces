@@ -1,0 +1,7 @@
+<?php
+
+return [
+    'dsn' => getenv('QA_DB_DSN') ?: 'mysql:host=mysql-edb1dc6-quick-annonces.h.aivencloud.com;port=19206;dbname=gestionproduit_v2;charset=utf8mb4',
+    'username' => getenv('QA_DB_USER') ?: 'avnadmin',
+    'password' => getenv('QA_DB_PASSWORD') ?: '',
+];
