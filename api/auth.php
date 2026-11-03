@@ -21,8 +21,8 @@ $pdo = apiDb();
 
 if ($action === 'register') {
     $name = trim((string)($input['name'] ?? ''));
-    if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
-        apiJson(['ok' => false, 'error' => 'Enter your name, a valid email, and a password of at least 8 characters.'], 422);
+    if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^[A-Za-z0-9]{4}$/', $password)) {
+        apiJson(['ok' => false, 'error' => 'Enter your name, a valid email, and a password of exactly 4 letters or numbers.'], 422);
     }
     try {
         $stmt = $pdo->prepare("INSERT INTO qa_users (full_name, email, password_hash) VALUES (?, ?, ?)");

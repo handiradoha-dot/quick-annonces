@@ -299,8 +299,8 @@ function loginPage(register = false) {
   ${!register&&!adminLogin?`<div class="login-choice"><a class="btn btn-primary" href="login.html">Connexion client</a><a class="btn btn-outline" href="admin-login.html">Connexion administrateur</a></div>`:""}
   <form id="auth-form" data-role="${adminLogin?"admin":"customer"}">${register?`<div class="field"><label>Nom complet</label><input name="name" placeholder="Votre nom" required></div>`:""}
   <div class="field"><label>Adresse e-mail</label><input name="email" type="email" value="${adminLogin?"handiradoha@gmail.com":""}" placeholder="exemple@email.com" required></div>
-  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••••••" required ${register?'minlength="8"':""}></div>
-  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••••••" required minlength="8"></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
+  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••" required ${register?'minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."':""}></div>
+  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••" required minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
   <button class="btn btn-primary btn-block" style="margin-top:20px">${register?"Créer mon compte":"Se connecter"}</button></form>
   <p class="center small">${register?"Déjà inscrit ?":adminLogin?"Vous êtes un client ?":"Vous n’avez pas de compte ?"} <a class="text-link" href="${register||adminLogin?"login":"register"}.html">${register||adminLogin?"Se connecter":"Créer un compte"}</a></p></section></div>`);
 }
@@ -497,8 +497,8 @@ function loginPage(register = false) {
   ${!register&&!adminLogin?`<div class="login-choice"><a class="btn btn-primary" href="login.html">Connexion client</a><a class="btn btn-outline" href="admin-login.html">Connexion administrateur</a></div>`:""}
   <form id="auth-form" data-role="${adminLogin?"admin":"customer"}">${register?`<div class="field"><label>Nom complet</label><input name="name" placeholder="Votre nom" required></div>`:""}
   <div class="field"><label>Adresse e-mail</label><input name="email" type="email" placeholder="exemple@email.com" required></div>
-  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••••••" required ${register?'minlength="8"':""}></div>
-  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••••••" required minlength="8"></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
+  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••" required ${register?'minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."':""}></div>
+  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••" required minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
   <button class="btn btn-primary btn-block" style="margin-top:20px">${register?"Créer mon compte":"Se connecter"}</button></form>
   <p class="center small">${register?"Déjà inscrit ?":adminLogin?"Vous êtes un client ?":"Vous n’avez pas de compte ?"} <a class="text-link" href="${register||adminLogin?"login":"register"}.html">${register||adminLogin?"Se connecter":"Créer un compte"}</a></p></section></div>`);
 }
@@ -641,8 +641,8 @@ function loginPage(register = false) {
   ${!register&&!adminLogin?`<div class="login-choice"><a class="btn btn-primary" href="login.html">Connexion client</a><a class="btn btn-outline" href="admin-login.html">Connexion administrateur</a></div>`:""}
   <form id="auth-form" data-role="${adminLogin?"admin":"customer"}">${register?`<div class="field"><label>Nom complet</label><input name="name" placeholder="Votre nom" required></div>`:""}
   <div class="field"><label>Adresse e-mail</label><input name="email" type="email" placeholder="exemple@email.com" required></div>
-  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••••••" required ${register?'minlength="8"':""}></div>
-  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••••••" required minlength="8"></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
+  <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••" required ${register?'minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."':""}></div>
+  ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••" required minlength="4" maxlength="4" pattern="[A-Za-z0-9]{4}" title="Utilisez exactement 4 lettres ou chiffres."></div>`:`<div style="text-align:right"><a class="text-link small" href="forgot.html">Mot de passe oublié ?</a></div>`}
   <button class="btn btn-primary btn-block" style="margin-top:20px">${register?"Créer mon compte":"Se connecter"}</button></form>
   <p class="center small">${register?"Déjà inscrit ?":adminLogin?"Vous êtes un client ?":"Vous n’avez pas de compte ?"} <a class="text-link" href="${register||adminLogin?"login":"register"}.html">${register||adminLogin?"Se connecter":"Créer un compte"}</a></p></section></div>`);
 }
