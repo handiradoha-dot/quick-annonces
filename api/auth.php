@@ -38,8 +38,8 @@ if ($action === 'register') {
 }
 
 if ($action === 'login') {
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $password === '') {
-        apiJson(['ok' => false, 'error' => 'Enter a valid email and password.'], 422);
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^[A-Za-z0-9]{4}$/', $password)) {
+        apiJson(['ok' => false, 'error' => 'Enter a valid email and a password of exactly 4 letters or numbers.'], 422);
     }
     $stmt = $pdo->prepare('SELECT id, full_name, email, password_hash, role FROM qa_users WHERE email = ?');
     $stmt->execute([$email]);
