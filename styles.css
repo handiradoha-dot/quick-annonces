@@ -259,3 +259,5 @@ input, select, textarea, .btn, button { border-radius: 14px; }
   .searchbar { flex-wrap: wrap; }
   .searchbar .btn { width: 100%; }
 }
+.user-link { font-weight: 700; color: var(--primary); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.user-link:hover { text-decoration: underline; }
