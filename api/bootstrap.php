@@ -25,7 +25,10 @@ function database()
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-    $configPath = is_file(__DIR__ . '/config.php') ? __DIR__ . '/config.php' : __DIR__ . '/config.php.example';
+    $hasEnvironmentConfig = getenv('VERCEL') || getenv('DB_HOST') || getenv('QA_DB_DSN');
+    $configPath = $hasEnvironmentConfig || !is_file(__DIR__ . '/config.php')
+        ? __DIR__ . '/config.php.example'
+        : __DIR__ . '/config.php';
     $config = require $configPath;
     if (empty($config['ssl_ca']) && is_file(__DIR__ . '/ca.pem')) $config['ssl_ca'] = __DIR__ . '/ca.pem';
     if (empty($config['dsn']) || empty($config['username']) || empty($config['password'])) {

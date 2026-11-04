@@ -106,7 +106,7 @@ listings.forEach(item => {
 function saveListings() { writeStore("listings", listings); }
 if (Array.isArray(legacyListings) && !readStore("listings", null)) saveListings();
 function saveFilters() { writeStore("filters", { category: state.category, type: state.type, sort: state.sort, query: state.query }); }
-const categories = ["Immobilier", "Véhicules", "Électronique", "Mode", "Maison & Jardin", "Sports", "Services"];
+const categories = apiEnabled ? [] : ["Immobilier", "Véhicules", "Électronique", "Mode", "Maison & Jardin", "Sports", "Services"];
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
 const getListing = id => listings.find(item => item.id === Number(id)) || listings[0];
 const statusText = status => ({ Approuvee: "Approuvée", Refusee: "Refusée" }[status] || status);
