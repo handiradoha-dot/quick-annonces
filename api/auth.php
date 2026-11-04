@@ -14,6 +14,7 @@ if ($action === 'register' && $method === 'POST') {
         jsonResponse(['error' => 'Veuillez renseigner un prénom, un nom, un e-mail valide et un mot de passe de 6 caractères minimum.'], 422);
     }
     try {
+        assertUserSchema(database());
         ensureSessionTable(database());
         $statement = database()->prepare('INSERT INTO qa_users (full_name, email, password_hash, role) VALUES (?, ?, ?, "user")');
         $statement->execute(["$firstName $lastName", $email, password_hash($password, PASSWORD_DEFAULT)]);
@@ -33,6 +34,7 @@ if ($action === 'register' && $method === 'POST') {
 }
 
 if ($action === 'login' && $method === 'POST') {
+    assertUserSchema(database());
     $body = requestBody();
     $email = strtolower(trim((string)(isset($body['email']) ? $body['email'] : '')));
     $password = (string)(isset($body['password']) ? $body['password'] : '');

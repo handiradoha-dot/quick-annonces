@@ -8,8 +8,8 @@ function homePage() {
     <div class="actions" style="margin-top:16px"><a class="btn btn-outline" href="search.html">Explorer les annonces</a></div></div>
     <div class="hero-art"><div class="art-card"><div class="art-visual">🛍️</div><strong>Une bonne affaire près de vous</strong><small>Des annonces simples, des contacts directs.</small></div></div>
   </section>
-  <section class="section"><div class="section-heading"><div><h2>Annonces récentes</h2><p>Découvrez les dernières annonces près de chez vous.</p></div><a class="text-link" href="search.html">Voir toutes les annonces →</a></div>${cards(listings.slice(9, 12).concat(listings.slice(0, 1)))}</section>
-  <section class="section"><div class="section-heading"><div><h2>Annonces en vedette</h2><p>Des offres sélectionnées pour vous.</p></div></div>${cards(listings.slice(0, 4))}</section>
+  <section class="section"><div class="section-heading"><div><h2>Annonces récentes</h2><p>Découvrez les dernières annonces près de chez vous.</p></div><a class="text-link" href="search.html">Voir toutes les annonces →</a></div>${cards(listings.slice(0, 4))}</section>
+  <section class="section"><div class="section-heading"><div><h2>Annonces en vedette</h2><p>Des offres sélectionnées pour vous.</p></div></div>${cards(listings.slice(0, 8))}</section>
   <section class="section panel"><div class="two-col"><div><span class="eyebrow">QuickMatch ✨</span><h2>Votre recherche, en plus simple</h2><p>Décrivez ce que vous cherchez et découvrez les annonces les plus pertinentes.</p></div><div class="actions" style="align-items:center;justify-content:flex-end"><a class="btn btn-primary" href="find-for-me.html">Trouver pour moi ✨</a><a class="btn btn-outline" href="quickmatch.html">Découvrir QuickMatch</a></div></div></section>`, "home");
 }
 

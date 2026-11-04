@@ -108,7 +108,7 @@ if (Array.isArray(legacyListings) && !readStore("listings", null)) saveListings(
 function saveFilters() { writeStore("filters", { category: state.category, type: state.type, sort: state.sort, query: state.query }); }
 const categories = apiEnabled ? [] : ["Immobilier", "Véhicules", "Électronique", "Mode", "Maison & Jardin", "Sports", "Services"];
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
-const getListing = id => listings.find(item => item.id === Number(id)) || listings[0];
+const getListing = id => listings.find(item => String(item.id) === String(id) || String(item.product_reference || '') === String(id)) || listings[0];
 const statusText = status => ({ Approuvee: "Approuvée", Refusee: "Refusée" }[status] || status);
 const icon = name => ({ home: "⌂", search: "⌕", heart: "♡", user: "♙", plus: "+" }[name] || "•");
 
@@ -157,7 +157,7 @@ function shell(content, active = "") { app.innerHTML = header(active) + `<main c
 function listingCard(item) {
   const saved = state.favorites.has(item.id);
   return `<article class="listing">
-    <div class="listing-image"><span class="pill">${item.type}</span><button class="heart ${saved ? "saved" : ""}" data-fav="${item.id}" aria-pressed="${saved}" aria-label="${saved ? "Retirer des favoris" : "Ajouter aux favoris"}">${saved ? "♥" : "♡"}</button>${item.image ? `<img src="${item.image}" alt="${escapeHTML(item.title)}">` : `<span>${item.emoji}</span>`}</div>
+    <div class="listing-image"><span class="pill">${item.type}</span>${item.can_favorite === false ? '' : `<button class="heart ${saved ? "saved" : ""}" data-fav="${item.id}" aria-pressed="${saved}" aria-label="${saved ? "Retirer des favoris" : "Ajouter aux favoris"}">${saved ? "♥" : "♡"}</button>`}${item.image ? `<img src="${item.image}" alt="${escapeHTML(item.title)}">` : `<span>${item.emoji}</span>`}</div>
     <a class="listing-body" href="detail.html?id=${item.id}"><h3>${escapeHTML(item.title)}</h3><div class="price">${money(item.price)}${item.id === 3 ? "/mois" : ""}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.age)} ${item.verified ? "· ✓ Vérifié" : ""}</div></a>
   </article>`;
 }

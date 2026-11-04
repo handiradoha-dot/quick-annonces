@@ -1,14 +1,6 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 $pdo = database(); ensureListingMeta($pdo);
-$pdo->exec("CREATE TABLE IF NOT EXISTS qa_comments (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    listing_id BIGINT UNSIGNED NOT NULL,
-    user_id BIGINT UNSIGNED NOT NULL,
-    body TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id), KEY idx_qa_comments_listing (listing_id), KEY idx_qa_comments_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $listingId = (int)($_GET['listing_id'] ?? 0); if (!$listingId) jsonResponse(['error' => 'Annonce requise.'], 422);
     $stmt = $pdo->prepare('SELECT c.id, c.body AS text, u.full_name AS user, c.created_at FROM qa_comments c JOIN qa_users u ON u.id = c.user_id WHERE c.listing_id = ? ORDER BY c.id DESC');

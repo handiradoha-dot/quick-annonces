@@ -27,12 +27,59 @@ function listingRows($pdo, $admin = false, $mine = false)
     }, $stmt->fetchAll());
 }
 
+function publicProductRows($pdo)
+{
+    $hasMeta = (int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'qa_listing_meta'")->fetchColumn() > 0;
+    if ($hasMeta) {
+        $sql = "SELECT m.id AS id, p.reference AS product_reference, p.libelle AS title,
+            p.prixUnitaire AS price, p.photoProduit AS image, c.name AS category,
+            m.city, m.description, m.condition_label AS `condition`, m.listing_type AS type,
+            COALESCE(m.status, 'Approuvee') AS status, COALESCE(m.created_at, p.dateAchat) AS created_at
+            FROM produit p LEFT JOIN qa_categories c ON c.id = p.idCategorie
+            LEFT JOIN qa_listing_meta m ON m.product_reference = p.reference
+            WHERE m.id IS NULL OR m.status IN ('Approuvee','Approuvée','approved','active')
+            ORDER BY COALESCE(m.created_at, p.dateAchat) DESC, p.reference DESC";
+    } else {
+        $sql = "SELECT NULL AS id, p.reference AS product_reference, p.libelle AS title,
+            p.prixUnitaire AS price, p.photoProduit AS image, c.name AS category,
+            NULL AS city, NULL AS description, NULL AS `condition`, NULL AS type,
+            'Approuvee' AS status, p.dateAchat AS created_at
+            FROM produit p LEFT JOIN qa_categories c ON c.id = p.idCategorie
+            ORDER BY p.dateAchat DESC, p.reference DESC";
+    }
+    try {
+        $rows = $pdo->query($sql)->fetchAll();
+    } catch (PDOException $exception) {
+        error_log('Public listing metadata unavailable: ' . $exception->getMessage());
+        $fallback = "SELECT NULL AS id, p.reference AS product_reference, p.libelle AS title,
+            p.prixUnitaire AS price, p.photoProduit AS image, c.name AS category,
+            NULL AS city, NULL AS description, NULL AS `condition`, NULL AS type,
+            'Approuvee' AS status, p.dateAchat AS created_at
+            FROM produit p LEFT JOIN qa_categories c ON c.id = p.idCategorie
+            ORDER BY p.dateAchat DESC, p.reference DESC";
+        $rows = $pdo->query($fallback)->fetchAll();
+    }
+    return array_map(static function ($row) {
+        $hasMetaId = $row['id'] !== null;
+        if (!$hasMetaId) $row['id'] = (string)$row['product_reference'];
+        if (is_numeric($row['id'])) $row['id'] = (int)$row['id'];
+        $row['price'] = (float)$row['price'];
+        $row['category'] = $row['category'] ?: 'Autre'; $row['city'] = $row['city'] ?: '';
+        $row['seller'] = 'Vendeur'; $row['age'] = $row['created_at'] ?: '';
+        $row['emoji'] = '📦'; $row['verified'] = false;
+        $row['status'] = 'Approuvee'; $row['type'] = $row['type'] ?: 'À vendre';
+        $row['condition'] = $row['condition'] ?: ''; $row['description'] = $row['description'] ?: '';
+        $row['can_favorite'] = $hasMetaId;
+        return $row;
+    }, $rows);
+}
+
 $pdo = database();
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $admin = ($_GET['admin'] ?? '') === '1'; $mine = ($_GET['mine'] ?? '') === '1';
     if ($admin && authenticatedUser()['role'] !== 'admin') jsonResponse(['error' => 'Accès administrateur requis.'], 403);
-    jsonResponse(['listings' => listingRows($pdo, $admin, $mine)]);
+    jsonResponse(['listings' => ($admin || $mine) ? listingRows($pdo, $admin, $mine) : publicProductRows($pdo)]);
 }
 if ($method === 'POST') {
     $user = authenticatedUser(); $body = requestBody();

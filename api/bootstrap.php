@@ -16,9 +16,9 @@ set_exception_handler(static function ($exception) {
     $isDatabaseError = $exception instanceof PDOException;
     $driverCode = $isDatabaseError ? (int)($exception->errorInfo[1] ?? 0) : 0;
     if (!$isDatabaseError) $message = 'Erreur serveur.';
-    elseif ($driverCode === 1142 || $driverCode === 1143) $message = 'DB_USER n’a pas les droits requis. Accordez INSERT/SELECT/UPDATE/DELETE et CREATE pour les tables applicatives.';
+    elseif ($driverCode === 1142 || $driverCode === 1143) $message = 'DB_USER doit avoir les droits SELECT, INSERT, UPDATE et DELETE sur les tables applicatives.';
     elseif ($driverCode === 1146) $message = 'Une table requise manque. Exécutez les migrations SQL du dossier api/migrations dans Aiven.';
-    elseif ($driverCode === 1054) $message = 'Le schéma MySQL ne correspond pas aux colonnes attendues de qa_users.';
+    elseif ($driverCode === 1054) $message = 'Une colonne SQL est absente du schéma utilisé. Vérifiez les colonnes de produit et qa_categories; les journaux Vercel donnent la table concernée.';
     else $message = 'Erreur base de données. Vérifiez le schéma et les droits de DB_USER.';
     jsonResponse(['error' => $message], $isDatabaseError ? 503 : 500);
 });
@@ -83,6 +83,15 @@ function authenticatedUser()
     return $user;
 }
 
+function assertUserSchema($pdo = null)
+{
+    $pdo = $pdo ?: database();
+    $columns = $pdo->query('SHOW COLUMNS FROM qa_users')->fetchAll(PDO::FETCH_COLUMN);
+    $required = ['id', 'full_name', 'email', 'password_hash', 'role'];
+    $missing = array_values(array_diff($required, $columns));
+    if ($missing) jsonResponse(['error' => 'qa_users missing columns: ' . implode(', ', $missing) . '. Check DB_NAME in Vercel and the schema in Aiven.'], 503);
+}
+
 function clearAuthCookie()
 {
     setcookie('qa_auth', '', ['expires' => time() - 3600, 'path' => '/', 'httponly' => true, 'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'samesite' => 'Lax']);
@@ -125,50 +134,15 @@ function revokeAuthSession()
 function ensureSessionTable($pdo = null)
 {
     $pdo = $pdo ?: database();
-    try {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS qa_sessions (
-        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        user_id BIGINT UNSIGNED NOT NULL,
-        token_hash CHAR(64) NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        UNIQUE KEY uq_qa_sessions_token_hash (token_hash),
-        KEY idx_qa_sessions_user_id (user_id),
-        KEY idx_qa_sessions_expires_at (expires_at)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    } catch (PDOException $exception) {
-        $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'qa_sessions'");
-        $check->execute();
-        if ((int)$check->fetchColumn() === 0) {
-            jsonResponse(['error' => 'La table qa_sessions manque et DB_USER ne peut pas la créer. Exécutez api/migrations/001_qa_sessions.sql dans Aiven avec un utilisateur autorisé, puis réessayez.'], 503);
-        }
-    }
+    $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'qa_sessions'");
+    $check->execute();
+    if ((int)$check->fetchColumn() === 0) jsonResponse(['error' => 'Table qa_sessions absente. Exécutez api/migrations/001_qa_sessions.sql une fois dans Aiven avec un utilisateur administrateur.'], 503);
 }
-
 function ensureListingMeta($pdo = null)
 {
     $pdo = $pdo ?: database();
-    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_listing_meta (
-        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        product_reference VARCHAR(50) NOT NULL,
-        user_id BIGINT UNSIGNED NULL,
-        status VARCHAR(30) NOT NULL DEFAULT 'Approuvee',
-        listing_type VARCHAR(50) NULL,
-        condition_label VARCHAR(100) NULL,
-        description TEXT NULL,
-        city VARCHAR(100) NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id), UNIQUE KEY uq_qa_listing_meta_reference (product_reference),
-        KEY idx_qa_listing_meta_user (user_id), KEY idx_qa_listing_meta_status (status)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_comments (
-        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        listing_id BIGINT UNSIGNED NOT NULL,
-        user_id BIGINT UNSIGNED NOT NULL,
-        body TEXT NOT NULL,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id), KEY idx_qa_comments_listing (listing_id), KEY idx_qa_comments_user (user_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('qa_listing_meta', 'qa_comments')");
+    $check->execute();
+    if ((int)$check->fetchColumn() < 2) jsonResponse(['error' => 'Tables applicatives absentes. Exécutez api/migrations/002_app_tables.sql une fois dans Aiven avec un utilisateur administrateur.'], 503);
     $pdo->exec("INSERT IGNORE INTO qa_listing_meta (product_reference, status) SELECT reference, 'Approuvee' FROM produit");
 }
