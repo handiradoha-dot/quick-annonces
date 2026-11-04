@@ -14,7 +14,13 @@ function jsonResponse(array $payload, $status = 200)
 set_exception_handler(static function ($exception) {
     error_log($exception->getMessage());
     $isDatabaseError = $exception instanceof PDOException;
-    jsonResponse(['error' => $isDatabaseError ? 'Erreur base de données. Vérifiez le schéma et les droits de DB_USER.' : 'Erreur serveur. Réessayez dans un instant.'], $isDatabaseError ? 503 : 500);
+    $driverCode = $isDatabaseError ? (int)($exception->errorInfo[1] ?? 0) : 0;
+    if (!$isDatabaseError) $message = 'Erreur serveur.';
+    elseif ($driverCode === 1142 || $driverCode === 1143) $message = 'DB_USER n’a pas les droits requis. Accordez INSERT/SELECT/UPDATE/DELETE et CREATE pour les tables applicatives.';
+    elseif ($driverCode === 1146) $message = 'Une table requise manque. Exécutez les migrations SQL du dossier api/migrations dans Aiven.';
+    elseif ($driverCode === 1054) $message = 'Le schéma MySQL ne correspond pas aux colonnes attendues de qa_users.';
+    else $message = 'Erreur base de données. Vérifiez le schéma et les droits de DB_USER.';
+    jsonResponse(['error' => $message], $isDatabaseError ? 503 : 500);
 });
 
 function requestBody()
@@ -119,7 +125,8 @@ function revokeAuthSession()
 function ensureSessionTable($pdo = null)
 {
     $pdo = $pdo ?: database();
-    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_sessions (
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS qa_sessions (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT UNSIGNED NOT NULL,
         token_hash CHAR(64) NOT NULL,
@@ -129,7 +136,14 @@ function ensureSessionTable($pdo = null)
         UNIQUE KEY uq_qa_sessions_token_hash (token_hash),
         KEY idx_qa_sessions_user_id (user_id),
         KEY idx_qa_sessions_expires_at (expires_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (PDOException $exception) {
+        $check = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'qa_sessions'");
+        $check->execute();
+        if ((int)$check->fetchColumn() === 0) {
+            jsonResponse(['error' => 'La table qa_sessions manque et DB_USER ne peut pas la créer. Exécutez api/migrations/001_qa_sessions.sql dans Aiven avec un utilisateur autorisé, puis réessayez.'], 503);
+        }
+    }
 }
 
 function ensureListingMeta($pdo = null)
