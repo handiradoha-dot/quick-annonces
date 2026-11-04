@@ -24,6 +24,7 @@ function listingRows($admin = false, $mine = false)
     $image = pickColumn($columns, ['image_url', 'image', 'photo', 'photoProduit']);
     $status = pickColumn($columns, ['status', 'moderation_status', 'statut']);
     $categoryId = pickColumn($columns, ['category_id', 'idCategorie']);
+    $categoryName = pickColumn($columns, ['category', 'category_name', 'categorie']);
     $userId = pickColumn($columns, ['user_id', 'seller_id', 'owner_id']);
     $type = pickColumn($columns, ['type', 'listing_type']);
     $condition = pickColumn($columns, ['condition_label', 'item_condition', 'condition']);
@@ -35,7 +36,7 @@ function listingRows($admin = false, $mine = false)
         $catCols = tableColumns('qa_categories'); $catName = pickColumn($catCols, ['name', 'title', 'libelle']);
         if ($catName) { $joins .= " LEFT JOIN qa_categories c ON c.id = l.`$categoryId`"; $select[] = "c.`$catName` AS category"; }
     }
-    if (!isset($catName)) $select[] = "NULL AS category";
+    if (!isset($catName)) $select[] = $categoryName ? "l.`$categoryName` AS category" : "NULL AS category";
     if ($userId && in_array('id', tableColumns('qa_users'), true)) {
         $select[] = 'u.full_name AS seller'; $joins .= " LEFT JOIN qa_users u ON u.id = l.`$userId`";
     } else $select[] = "NULL AS seller";
@@ -77,6 +78,9 @@ if ($method === 'POST') {
     if ($catColumn && !empty($body['category'])) {
         $catCols = tableColumns('qa_categories'); $catName = pickColumn($catCols, ['name','title','libelle']);
         if ($catName) { $cat = database()->prepare("SELECT id FROM qa_categories WHERE `$catName` = ?"); $cat->execute([$body['category']]); $values[$catColumn] = $cat->fetchColumn() ?: null; }
+    } else {
+        $catNameColumn = pickColumn($columns, ['category','category_name','categorie']);
+        if ($catNameColumn && !empty($body['category'])) $values[$catNameColumn] = (string)$body['category'];
     }
     $values[$status] = 'En attente';
     if ($values[$title] === '' || $values[$price] <= 0) jsonResponse(['error' => 'Titre et prix valide requis.'], 422);

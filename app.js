@@ -356,9 +356,10 @@ function bindGlobal() {
 if (apiEnabled) {
   databaseReady = (async () => {
     try {
-      const [session, data] = await Promise.all([
+      const [session, data, categoryData] = await Promise.all([
         apiRequest("auth.php?action=session").catch(() => ({ user: null })),
-        apiRequest("listings.php")
+        apiRequest("listings.php").then(result => ({ result })).catch(error => ({ error })),
+        apiRequest("categories.php").catch(() => ({ categories: null }))
       ]);
       const serverUser = session.user;
       if (serverUser) {
@@ -366,7 +367,15 @@ if (apiEnabled) {
         currentUser = { id: serverUser.id, firstName: names.shift() || "", lastName: names.join(" "), email: serverUser.email, role: serverUser.role };
         writeStore("currentUser", currentUser);
       } else { currentUser = null; localStorage.removeItem("qa-currentUser"); }
-      listings.splice(0, listings.length, ...(Array.isArray(data.listings) ? data.listings : []));
+      listings.splice(0, listings.length, ...(Array.isArray(data.result?.listings) ? data.result.listings : []));
+      if (data.error) setTimeout(() => toast(`Les annonces n'ont pas pu être chargées : ${data.error.message}`), 0);
+      if (Array.isArray(categoryData.categories)) {
+        categories.splice(0, categories.length, ...categoryData.categories.map(category => category.name));
+        if (state.category !== "Toutes les catégories" && !categories.includes(state.category)) {
+          state.category = "Toutes les catégories";
+          saveFilters();
+        }
+      }
     } catch (error) {
       listings.splice(0, listings.length);
       setTimeout(() => toast(`Données indisponibles : ${error.message}`), 0);
