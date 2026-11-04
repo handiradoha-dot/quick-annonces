@@ -14,6 +14,7 @@ if ($action === 'register' && $method === 'POST') {
         jsonResponse(['error' => 'Veuillez renseigner un prénom, un nom, un e-mail valide et un mot de passe de 6 caractères minimum.'], 422);
     }
     try {
+        ensureSessionTable(database());
         $statement = database()->prepare('INSERT INTO qa_users (full_name, email, password_hash, role) VALUES (?, ?, ?, "user")');
         $statement->execute(["$firstName $lastName", $email, password_hash($password, PASSWORD_DEFAULT)]);
     } catch (PDOException $exception) {
@@ -22,8 +23,13 @@ if ($action === 'register' && $method === 'POST') {
         }
         throw $exception;
     }
-    setAuthenticatedUser((int)database()->lastInsertId());
-    jsonResponse(['user' => authenticatedUser()], 201);
+    try {
+        setAuthenticatedUser((int)database()->lastInsertId());
+        jsonResponse(['user' => authenticatedUser()], 201);
+    } catch (Throwable $exception) {
+        error_log($exception->getMessage());
+        jsonResponse(['error' => 'Le compte a été créé, mais la session n’a pas pu démarrer. Vérifiez les droits de création de table pour DB_USER sur la base Aiven.'], 503);
+    }
 }
 
 if ($action === 'login' && $method === 'POST') {

@@ -1,33 +1,30 @@
 # QuickAnnonces
 
-Application statique servie par Vercel avec fonctions PHP et MySQL Aiven. Les comptes et les annonces passent par l'API PHP.
+Application statique servie par Vercel avec fonctions PHP, MySQL Aiven et Cloudinary.
 
-## Certificat CA Aiven
+## Variables Vercel
 
-Le certificat public Aiven est versionné dans `api/ca.pem`. L'API charge ce fichier directement avec PDO, en local comme sur Vercel. Il n'est pas nécessaire de créer une variable Vercel pour le certificat.
+Dans les environnements utilisés par le projet, configurer :
 
-## Variables d'environnement Vercel
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` (Aiven)
+- `DB_NAME` si le nom de base n'est pas `gestionproduit_v2`
+- `CLOUDINARY_URL` (Cloudinary)
 
-Définir dans Production (et Preview/Development si nécessaire) :
+Le certificat public Aiven est versionné dans `api/ca.pem`; aucune variable Vercel n'est nécessaire pour le certificat. `api/config.php` local est ignoré par Git. `api/config.php.example` lit les variables ci-dessus.
 
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` : valeurs fournies par Aiven.
-- `DB_NAME` : nom de la base; facultatif si la base s'appelle `gestionproduit_v2`.
-- `CLOUDINARY_URL` : URL de connexion du produit Cloudinary. Cette variable est lue uniquement par l'API PHP et ne doit jamais être envoyée au navigateur.
+## Stockage des données
 
-L'API accepte aussi `QA_DB_DSN`, `QA_DB_USER` et `QA_DB_PASSWORD` si tu préfères le format DSN.
+- Les comptes sont dans `qa_users`; l'authentification sans JWT utilise un cookie opaque HttpOnly et la table `qa_sessions`.
+- Les catégories viennent de `qa_categories`.
+- Les annonces sont dans `produit` (`reference`, `libelle`, `prixUnitaire`, `dateAchat`, `photoProduit`, `idCategorie`).
+- `produit` ne contient pas le vendeur, la ville, la description ou le statut de modération. L'API crée `qa_listing_meta` pour conserver ces informations et relier chaque annonce à `produit.reference`. Les produits existants sont ajoutés comme annonces approuvées.
+- Les favoris, alertes, conversations et messages utilisent respectivement `qa_favorites`, `qa_alerts`, `qa_conversations` et `qa_messages`.
+- Les commentaires utilisent `qa_comments`, car cette table ne figure pas dans le schéma fourni.
 
-`api/config.php` local est ignoré par Git. `api/config.php.example` est le modèle. `vercel.json` configure `vercel-php@0.9.0`, qui nécessite Node.js 22; `package.json` fixe cette version pour le build Vercel.
+L'API crée `qa_sessions`, `qa_listing_meta` et `qa_comments` si nécessaire. L'utilisateur MySQL configuré dans Vercel doit avoir les droits `CREATE`, `SELECT`, `INSERT`, `UPDATE` et `DELETE`.
 
-## Sessions sans JWT
+Les images sont envoyées à Cloudinary par l'API PHP; seule leur URL est sauvegardée dans `produit.photoProduit`.
 
-L'authentification utilise un jeton aléatoire opaque dans un cookie `HttpOnly`, `SameSite=Lax` et `Secure` en HTTPS. Seul son hash SHA-256 est enregistré dans `qa_sessions`; l'expiration est de 14 jours. Avant le premier déploiement, exécutez une fois [`api/migrations/001_qa_sessions.sql`](api/migrations/001_qa_sessions.sql) dans Aiven.
+## Déploiement
 
-## Schéma annonces
-
-Les captures ne montrent pas les colonnes de `qa_listings`. L'API reconnaît des variantes courantes, mais a besoin de `id`, titre, prix, propriétaire et statut pour publier et modérer. Les colonnes reconnues sont documentées dans `api/listings.php`.
-
-Les photos sont envoyées par le serveur à Cloudinary, puis leur URL est enregistrée dans l'annonce. Favoris, alertes, conversations et messages restent à synchroniser avec leurs tables.
-
-## Développement
-
-Servir le projet via un serveur web avec PHP et les variables d'environnement. `file://` ne permet pas d'appeler l'API.
+`vercel.json` configure le runtime PHP des routes `api/*.php`. Après un changement de code, pousser la branche reliée à Vercel puis vérifier `/api/health.php` et `/api/categories.php`.

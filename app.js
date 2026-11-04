@@ -166,6 +166,7 @@ function pageTitle(title, subtitle = "") { return `<div class="page-title"><h1>$
 
 function matchRow(item, score) { return `<div class="match-row"><div class="mini-visual">${item.emoji}</div><div><strong>${item.title}</strong><div class="price">${money(item.price)}</div><div class="meta">Correspond à votre recherche</div></div><div class="match-score">${score}% MATCH<br><a class="text-link small" href="detail.html?id=${item.id}">Voir l’annonce</a></div></div>`; }
 function escapeHTML(value = "") { return String(value).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[ch])); }
+function normalizeText(value = "") { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase(); }
 
 let activeRender = null;
 let databaseReady = Promise.resolve();
@@ -202,13 +203,17 @@ function bindGlobal() {
   });
   if (navSearch) navSearch.addEventListener("submit", e => { e.preventDefault(); clearTimeout(searchTimer); runNavSearch(new FormData(navSearch).get("q")); });
   $("#menu-toggle")?.addEventListener("click", e => { const button = e.currentTarget; const open = button.getAttribute("aria-expanded") !== "true"; button.setAttribute("aria-expanded", String(open)); $("#primary-nav")?.classList.toggle("open", open); });
-  $$("[data-fav]").forEach(btn => btn.addEventListener("click", e => {
+  $$('[data-fav]').forEach(btn => btn.addEventListener('click', async e => {
     e.preventDefault(); e.stopPropagation();
-    const id = Number(btn.dataset.fav);
-    if (state.favorites.has(id)) { state.favorites.delete(id); toast("Annonce retirée des favoris."); }
-    else { state.favorites.add(id); toast("Annonce ajoutée aux favoris."); }
-    writeStore("favorites", [...state.favorites]);
-    activeRender();
+    const id = Number(btn.dataset.fav), removing = state.favorites.has(id);
+    if (apiEnabled && !currentUser) return toast('Connectez-vous pour gérer vos favoris.');
+    if (apiEnabled) {
+      try { await apiRequest('favorites.php', { method: removing ? 'DELETE' : 'POST', body: JSON.stringify({ listing_id: id }) }); }
+      catch (error) { return toast(error.message); }
+    }
+    if (removing) { state.favorites.delete(id); toast('Annonce retirée des favoris.'); }
+    else { state.favorites.add(id); toast('Annonce ajoutée aux favoris.'); }
+    writeStore('favorites', [...state.favorites]); activeRender();
   }));
   $$("[data-go-detail]").forEach(btn => btn.addEventListener("click", () => go("detail", `/${btn.dataset.goDetail}`)));
   $("#hero-search")?.addEventListener("submit", e => { e.preventDefault(); state.query = new FormData(e.currentTarget).get("q").trim(); saveFilters(); go("search"); });
@@ -268,10 +273,32 @@ function bindGlobal() {
     if (file instanceof File && file.size) { const reader = new FileReader(); reader.onload = () => createListing(reader.result); reader.onerror = () => toast("Could not read the selected image."); reader.readAsDataURL(file); }
     else createListing("");
   });
-  $("#comment-form")?.addEventListener("submit", e => { e.preventDefault(); state.comments.push({ user: "Vous", text: new FormData(e.currentTarget).get("comment") }); writeStore("comments", state.comments); toast("Commentaire ajouté."); activeRender(); });
+  $("#comment-form")?.addEventListener("submit", async e => {
+    e.preventDefault(); const text = new FormData(e.currentTarget).get('comment').trim();
+    if (apiEnabled) {
+      if (!currentUser) return toast('Connectez-vous pour commenter.');
+      try { await apiRequest('comments.php', { method: 'POST', body: JSON.stringify({ listing_id: Number(currentRoute().id), body: text }) }); location.reload(); }
+      catch (error) { toast(error.message); }
+      return;
+    }
+    state.comments.push({ user: 'Vous', text }); writeStore('comments', state.comments); toast('Commentaire ajouté.'); activeRender();
+  });
   $$("[data-reply]").forEach(btn => btn.addEventListener("click", () => { $("#comment").value = `@${btn.dataset.reply} `; $("#comment").focus(); }));
-  $("#contact-seller")?.addEventListener("click", () => go("messages"));
-  $("#message-form")?.addEventListener("submit", e => { e.preventDefault(); const text = new FormData(e.currentTarget).get("message").trim(); if (!text) return; state.messages.push({ user: "Vous", text, mine: true }); writeStore("messages", state.messages); activeRender(); toast("Message ajouté à la conversation de démonstration."); });
+  $("#contact-seller")?.addEventListener("click", async () => {
+    if (!apiEnabled || !currentUser) return go('login');
+    try { const result = await apiRequest('messages.php', { method: 'POST', body: JSON.stringify({ action: 'start', listing_id: Number(currentRoute().id) }) }); location.href = `messages.html?conversation=${result.id}`; }
+    catch (error) { toast(error.message); }
+  });
+  $("#message-form")?.addEventListener("submit", async e => {
+    e.preventDefault(); const text = new FormData(e.currentTarget).get('message').trim(); if (!text) return;
+    const conversation = new URLSearchParams(location.search).get('conversation');
+    if (apiEnabled) {
+      try { await apiRequest('messages.php', { method: 'POST', body: JSON.stringify({ conversation_id: Number(conversation), body: text }) }); window.QuickAnnonces.reloadMessages?.(); e.currentTarget.reset(); }
+      catch (error) { toast(error.message); }
+      return;
+    }
+    state.messages.push({ user: 'Vous', text, mine: true }); writeStore('messages', state.messages); activeRender();
+  });
   $$(".chat-person").forEach(el => el.addEventListener("click", () => { $$(".chat-person").forEach(x=>x.classList.remove("active")); el.classList.add("active"); toast("Conversation de démonstration sélectionnée."); }));
   $("#auth-form")?.addEventListener("submit", async e => {
     e.preventDefault();
@@ -352,10 +379,26 @@ function bindGlobal() {
   $("#forgot-form")?.addEventListener("submit", e => { e.preventDefault(); toast("Lien simulé : aucun e-mail n’a été envoyé."); e.currentTarget.insertAdjacentHTML("beforeend", '<div class="notice success">✓ Demande traitée en mode démonstration.</div>'); });
   $("#reset-form")?.addEventListener("submit", e => { e.preventDefault(); const fd = new FormData(e.currentTarget); if(fd.get("password")!==fd.get("confirm")) return toast("Les mots de passe ne correspondent pas."); toast("Mot de passe mis à jour en mode démo."); go("login"); });
   $("#edit-profile")?.addEventListener("click", () => toast("Modification du profil : à connecter au backend."));
-  $("#run-match")?.addEventListener("click", () => { state.query = $("#match-query").value; toast("Correspondances recalculées pour la démo."); });
+  $("#run-match")?.addEventListener("click", () => {
+    const query = normalizeText($("#match-query")?.value || '');
+    const category = $('#match-category')?.value || '';
+    const matches = listings.filter(item => item.status === 'Approuvee' && (!query || normalizeText(`${item.title} ${item.description} ${item.category}`).includes(query)) && (!category || item.category === category)).slice(0, 8);
+    const container = $('#match-results');
+    if (container) container.innerHTML = matches.length ? cards(matches) : '<div class="empty"><h3>Aucune annonce correspondante</h3><p>Essayez avec d’autres mots.</p></div>';
+    toast(`${matches.length} annonce(s) correspondante(s).`);
+  });
   $("#create-alert")?.addEventListener("click", () => go("alerts"));
   $("#find-form")?.addEventListener("submit", e => { e.preventDefault(); toast("Résultats personnalisés simulés."); $("#personal-results").scrollIntoView({behavior:"smooth",block:"center"}); });
-  $("#alert-form")?.addEventListener("submit", e => { e.preventDefault(); toast("Alerte activée en mode démo."); e.currentTarget.insertAdjacentHTML("beforeend", '<div class="notice success">🔔 Votre alerte de démonstration est activée.</div>'); });
+  $("#alert-form")?.addEventListener("submit", async e => {
+    e.preventDefault(); const fd = new FormData(e.currentTarget);
+    if (apiEnabled) {
+      if (!currentUser) return toast('Connectez-vous pour enregistrer une alerte.');
+      try { await apiRequest('alerts.php', { method: 'POST', body: JSON.stringify({ query: fd.get('query'), max_price: fd.get('budget'), city: fd.get('city'), category: fd.get('category') }) }); toast('Alerte enregistrée.'); e.currentTarget.reset(); }
+      catch (error) { toast(error.message); }
+      return;
+    }
+    toast('Alerte activée en mode démo.');
+  });
   $$("[data-admin-filter]").forEach(btn => btn.addEventListener("click", () => { state.adminFilter = btn.dataset.adminFilter; activeRender(); }));
   $$("[data-moderate]").forEach(btn => btn.addEventListener("click", async () => { const item = listings.find(x => x.id === Number(btn.dataset.id)); if (!item) return; if (apiEnabled) { try { await apiRequest("listings.php", { method: "PATCH", body: JSON.stringify({ id: item.id, status: btn.dataset.moderate }) }); await window.QuickAnnonces.refreshListings("?admin=1"); } catch (error) { return toast(error.message); } } else { item.status = btn.dataset.moderate; saveListings(); } toast(`Annonce ${btn.dataset.moderate.toLowerCase()}.`); activeRender(); }));
   $$("[data-delete]").forEach(btn => btn.addEventListener("click", async () => { const item = listings.find(x => x.id === Number(btn.dataset.delete)); if (!item || !window.confirm("Supprimer cette annonce ?")) return; if (apiEnabled) { try { await apiRequest("listings.php", { method: "DELETE", body: JSON.stringify({ id: item.id }) }); } catch (error) { return toast(error.message); } } listings.splice(listings.indexOf(item), 1); saveListings(); toast("Annonce supprimée."); activeRender(); }));
@@ -365,12 +408,14 @@ function bindGlobal() {
 if (apiEnabled) {
   databaseReady = (async () => {
     try {
-      const [session, data, categoryData] = await Promise.all([
+      const [session, data, categoryData, favoriteData] = await Promise.all([
         apiRequest("auth.php?action=session").catch(() => ({ user: null })),
         apiRequest("listings.php").then(result => ({ result })).catch(error => ({ error })),
-        apiRequest("categories.php").then(result => ({ result })).catch(error => ({ error }))
+        apiRequest("categories.php").then(result => ({ result })).catch(error => ({ error })),
+        apiRequest('favorites.php').then(result => ({ result })).catch(() => ({ result: { ids: [] } }))
       ]);
       const serverUser = session.user;
+      state.favorites = new Set(Array.isArray(favoriteData.result?.ids) ? favoriteData.result.ids : []);
       if (serverUser) {
         const names = String(serverUser.full_name || "").split(/\s+/);
         currentUser = { id: serverUser.id, firstName: names.shift() || "", lastName: names.join(" "), email: serverUser.email, role: serverUser.role };

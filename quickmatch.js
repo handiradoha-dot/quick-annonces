@@ -1,8 +1,10 @@
-const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
-
+const { mountPage, listings, categories, shell, pageTitle, escapeHTML, money } = window.QuickAnnonces;
 function quickmatchPage() {
-  shell(`<div class="two-col"><section>${pageTitle("QuickMatch ✨", "Notre fonctionnalité spéciale : nous trouvons automatiquement les annonces qui correspondent à votre recherche.")}<div class="panel"><div class="field"><label>🔎 Je recherche</label><input id="match-query" value="iPhone 14 128 Go"></div><button id="run-match" class="btn btn-primary">Trouver les correspondances</button><button id="create-alert" class="btn btn-outline">🔔 Créer une alerte</button></div><div class="section" id="match-detail"><div class="product-visual" style="min-height:200px">📱</div><h2 class="section">iPhone 14 — Excellent état</h2><div class="price">4 900 DH</div><div class="notice success">✓ Vendeur vérifié · ★ 4.9</div><p>Description : téléphone en excellent état, batterie 92%, avec boîte et accessoires.</p><button class="btn btn-primary" data-go-detail="10">💬 Contacter</button> <button class="btn btn-outline" data-fav="10">♡ Ajouter aux favoris</button></div></section>
-  <aside><div class="panel"><h2>3 correspondances trouvées</h2><p>Les annonces les plus proches de votre recherche.</p>${matchRow(listings[9],98)}${matchRow(listings[10],90)}${matchRow(listings[3],82)}</div></aside></div>`);
+  const categoryOptions = categories.map(category => `<option>${escapeHTML(category)}</option>`).join('');
+  shell(`<div class="two-col"><section>${pageTitle('QuickMatch ✨', 'Trouvez les annonces publiées qui correspondent à vos mots-clés.')}
+    <div class="panel"><div class="field"><label for="match-query">Je recherche</label><input id="match-query" placeholder="Ex. : téléphone, appartement..."></div>
+    <div class="field"><label for="match-category">Catégorie</label><select id="match-category"><option value="">Toutes les catégories</option>${categoryOptions}</select></div>
+    <button id="run-match" class="btn btn-primary">Trouver les correspondances</button> <a class="btn btn-outline" href="alerts.html">Créer une alerte</a></div>
+    <div class="section" id="match-results"></div></section><aside class="panel"><h2>Annonces récentes</h2>${listings.filter(item => item.status === 'Approuvee').slice(0, 4).map(item => `<a class="match-row" href="detail.html?id=${item.id}"><div class="mini-visual">${item.image ? `<img src="${escapeHTML(item.image)}" alt="">` : item.emoji}</div><div><strong>${escapeHTML(item.title)}</strong><div class="price">${money(item.price)}</div><div class="meta">${escapeHTML(item.category)} · ${escapeHTML(item.city)}</div></div></a>`).join('') || '<p class="meta">Aucune annonce approuvée pour le moment.</p>'}</aside></div>`);
 }
-
-mountPage("quickmatch", quickmatchPage);
+mountPage('quickmatch', quickmatchPage);

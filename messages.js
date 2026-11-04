@@ -1,10 +1,29 @@
-const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
+const { mountPage, currentRoute, shell, escapeHTML, toast, apiRequest, isApiEnabled, getCurrentUser } = window.QuickAnnonces;
+let conversations = [];
+let selectedConversation = Number(new URLSearchParams(location.search).get('conversation')) || 0;
+let messages = [];
 
-function messagesPage() {
+async function loadMessages() {
+  if (!isApiEnabled || !getCurrentUser()) {
+    shell('<div class="empty"><h2>Connectez-vous pour consulter vos messages</h2><a class="btn btn-primary" href="login.html">Se connecter</a></div>', 'messages');
+    return;
+  }
+  try {
+    const data = await apiRequest('messages.php'); conversations = data.conversations || [];
+    if (!selectedConversation && conversations.length) selectedConversation = Number(conversations[0].id);
+    if (selectedConversation) {
+      const detail = await apiRequest(`messages.php?conversation=${selectedConversation}`); messages = detail.messages || [];
+    }
+  } catch (error) { toast(error.message); }
+  const current = conversations.find(item => Number(item.id) === selectedConversation);
+  const me = Number(getCurrentUser()?.id);
+  const chatPeople = conversations.map(item => `<a class="chat-person ${Number(item.id) === selectedConversation ? 'active' : ''}" href="messages.html?conversation=${item.id}"><strong>${escapeHTML(item.other_name || 'Utilisateur')}</strong><div class="meta">${escapeHTML(item.last_message || item.listing_title || 'Nouvelle conversation')}</div></a>`).join('');
+  const chatMessages = messages.map(item => `<div class="bubble ${Number(item.sender_id) === me ? 'mine' : ''}">${escapeHTML(item.body)}</div>`).join('');
   shell(`<div class="page-title"><h1>Messages</h1><p>Échangez directement avec les vendeurs et les acheteurs.</p></div>
-  <div class="panel chat-layout"><aside class="chat-list"><h3>Conversations</h3><div class="chat-person active"><strong>Yasmine Benali</strong><div class="meta">Bonjour, est-ce que le téléphone...</div></div><div class="chat-person"><strong>Sarah El Idrissi</strong><div class="meta">Dernier message...</div></div><div class="chat-person"><strong>Omar El Amrani</strong><div class="meta">Dernier message...</div></div><div class="chat-person"><strong>Imane Bennis</strong><div class="meta">Dernier message...</div></div></aside>
-  <section class="chat-window"><div class="chat-head">Yasmine Benali <span class="meta">· À propos de iPhone 13</span></div><div class="messages" id="messages">${state.messages.map(m=>`<div class="bubble ${m.mine?"mine":""}">${escapeHTML(m.text)}</div>`).join("")}</div>
-  <form class="chat-compose" id="message-form"><input name="message" placeholder="Écrire un message..." required><button class="btn btn-primary">Envoyer</button></form></section></div>`);
+    <div class="panel chat-layout"><aside class="chat-list"><h3>Conversations</h3>${chatPeople || '<p class="meta">Aucune conversation pour le moment.</p>'}</aside>
+    <section class="chat-window"><div class="chat-head">${escapeHTML(current?.other_name || 'Conversation')} <span class="meta">${current ? '· À propos de ' + escapeHTML(current.listing_title) : ''}</span></div>
+    <div class="messages" id="messages">${chatMessages || '<p class="meta">Envoyez le premier message.</p>'}</div>
+    ${current ? '<form class="chat-compose" id="message-form"><input name="message" placeholder="Écrire un message..." required maxlength="5000"><button class="btn btn-primary">Envoyer</button></form>' : ''}</section></div>`, 'messages');
 }
-
-mountPage("messages", messagesPage);
+window.QuickAnnonces.reloadMessages = loadMessages;
+mountPage('messages', loadMessages);

@@ -11,6 +11,12 @@ function jsonResponse(array $payload, $status = 200)
     exit;
 }
 
+set_exception_handler(static function ($exception) {
+    error_log($exception->getMessage());
+    $isDatabaseError = $exception instanceof PDOException;
+    jsonResponse(['error' => $isDatabaseError ? 'Erreur base de données. Vérifiez le schéma et les droits de DB_USER.' : 'Erreur serveur. Réessayez dans un instant.'], $isDatabaseError ? 503 : 500);
+});
+
 function requestBody()
 {
     $raw = file_get_contents('php://input');
@@ -79,6 +85,7 @@ function clearAuthCookie()
 function setAuthenticatedUser($id)
 {
     $pdo = database();
+    ensureSessionTable($pdo);
     $token = bin2hex(random_bytes(32));
     $expiresAt = date('Y-m-d H:i:s', time() + 60 * 60 * 24 * 14);
     $statement = $pdo->prepare('INSERT INTO qa_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)');
@@ -90,7 +97,9 @@ function sessionUserId()
 {
     $token = $_COOKIE['qa_auth'] ?? '';
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) return 0;
-    $statement = database()->prepare('SELECT user_id FROM qa_sessions WHERE token_hash = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1');
+    $pdo = database();
+    ensureSessionTable($pdo);
+    $statement = $pdo->prepare('SELECT user_id FROM qa_sessions WHERE token_hash = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1');
     $statement->execute([hash('sha256', $token)]);
     return (int)$statement->fetchColumn();
 }
@@ -99,8 +108,53 @@ function revokeAuthSession()
 {
     $token = $_COOKIE['qa_auth'] ?? '';
     if (preg_match('/^[a-f0-9]{64}$/', $token)) {
-        $statement = database()->prepare('DELETE FROM qa_sessions WHERE token_hash = ?');
+        $pdo = database();
+        ensureSessionTable($pdo);
+        $statement = $pdo->prepare('DELETE FROM qa_sessions WHERE token_hash = ?');
         $statement->execute([hash('sha256', $token)]);
     }
     clearAuthCookie();
+}
+
+function ensureSessionTable($pdo = null)
+{
+    $pdo = $pdo ?: database();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_sessions (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id BIGINT UNSIGNED NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uq_qa_sessions_token_hash (token_hash),
+        KEY idx_qa_sessions_user_id (user_id),
+        KEY idx_qa_sessions_expires_at (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+function ensureListingMeta($pdo = null)
+{
+    $pdo = $pdo ?: database();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_listing_meta (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        product_reference VARCHAR(50) NOT NULL,
+        user_id BIGINT UNSIGNED NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'Approuvee',
+        listing_type VARCHAR(50) NULL,
+        condition_label VARCHAR(100) NULL,
+        description TEXT NULL,
+        city VARCHAR(100) NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id), UNIQUE KEY uq_qa_listing_meta_reference (product_reference),
+        KEY idx_qa_listing_meta_user (user_id), KEY idx_qa_listing_meta_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS qa_comments (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        listing_id BIGINT UNSIGNED NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id), KEY idx_qa_comments_listing (listing_id), KEY idx_qa_comments_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("INSERT IGNORE INTO qa_listing_meta (product_reference, status) SELECT reference, 'Approuvee' FROM produit");
 }

@@ -5,7 +5,7 @@ try {
     $pdo = database();
     $categoryNames = $pdo->query('SELECT name FROM qa_categories ORDER BY name ASC')->fetchAll(PDO::FETCH_COLUMN);
     $categoryCount = count($categoryNames);
-    $listingCount = (int)$pdo->query('SELECT COUNT(*) FROM qa_listings')->fetchColumn();
+    $listingCount = (int)$pdo->query('SELECT COUNT(*) FROM produit')->fetchColumn();
     jsonResponse(['ok' => true, 'database' => 'connected', 'categories' => $categoryCount, 'category_names' => $categoryNames, 'listings' => $listingCount]);
 } catch (Throwable $exception) {
     error_log($exception->getMessage());
