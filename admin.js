@@ -1,6 +1,10 @@
 const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go } = window.QuickAnnonces;
 
-function adminPage() {
+async function adminPage() {
+  if (window.QuickAnnonces.isApiEnabled) {
+    try { await window.QuickAnnonces.refreshListings("?admin=1"); }
+    catch (error) { toast(error.message); }
+  }
   const needle = state.adminQuery.trim().toLocaleLowerCase();
   const items = listings.filter(x => (state.adminFilter === "Toutes" || (x.status || "Approuvee") === state.adminFilter) && (!needle || `${x.title} ${x.category} ${x.city} ${x.seller}`.toLocaleLowerCase().includes(needle)));
   const count = status => listings.filter(x => (x.status || "Approuvee") === status).length;

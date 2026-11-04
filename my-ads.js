@@ -1,11 +1,15 @@
 const { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go, readStore } = window.QuickAnnonces;
 
-function myAdsPage() {
+async function myAdsPage() {
   if (!readStore("currentUser", null)) {
     location.href = "login.html";
     return;
   }
-  const myItems = listings.filter(x => x.seller === "Mariam Tahayekt");
+  let myItems = listings.filter(x => x.seller === (readStore("currentUser", {})?.firstName || ""));
+  if (window.QuickAnnonces.isApiEnabled) {
+    try { myItems = await window.QuickAnnonces.refreshListings("?mine=1"); }
+    catch (error) { toast(error.message); }
+  }
   const submitted = new URLSearchParams(location.search).get("submitted");
   shell(`<div class="section-heading"><div>${pageTitle("Mes annonces", "Gérez vos publications et suivez leur statut de modération.")}</div>${readStore("currentUser", null) ? `<a href="publish.html" class="btn btn-primary">＋ Publier une annonce</a>` : ""}</div>
   ${submitted ? `<div class="notice success submit-confirmation"><strong>✓ Annonce envoyée pour approbation</strong><br>Elle apparaît dans la file d’attente admin et sera visible publiquement après validation. <a class="text-link" href="detail.html?id=${encodeURIComponent(submitted)}">Voir le récapitulatif →</a></div>` : ""}

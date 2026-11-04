@@ -1,34 +1,30 @@
-﻿# QuickAnnonces — Front-end
+# QuickAnnonces
 
-Projet de démonstration front-end inspiré de la maquette PDF QuickAnnonces.
+Application statique servie par Vercel avec fonctions PHP et MySQL Aiven. Les comptes et les annonces passent par l'API PHP.
 
-## Démarrer
-1. Décompressez le dossier.
-2. Ouvrez `index.html` dans votre navigateur. Chaque section est accessible depuis Accueil avec une page HTML dédiée.
-3. Pour une meilleure expérience de développement, ouvrez le dossier dans VS Code et utilisez l'extension **Live Server**.
+## Certificat CA Aiven
 
-Pour activer l'authentification réelle, servez le dossier avec Apache/PHP (pas `file://`). `api/config.php` contient déjà l'hôte Aiven non sensible et la base `gestionproduit_v2`; renseignez `QA_DB_PASSWORD` dans l'environnement PHP avant de tester. Le fichier `config.php` est ignoré par Git et ne doit jamais être publié.
+Le certificat public Aiven est versionné dans `api/ca.pem`. L'API charge ce fichier directement avec PDO, en local comme sur Vercel. Il n'est pas nécessaire de créer une variable Vercel pour le certificat.
 
-## Organisation
-- `index.html` : page d'accueil et point d'entrée.
-- Les autres fichiers `.html` : recherche, détail, publication, favoris, messages, connexion, QuickMatch et les autres écrans.
-- `admin-login.html` : connexion de démonstration pour ouvrir l’espace de modération.
-- `demo.html` : parcours guidé pour essayer les principaux écrans côté client et côté admin.
-- `styles.css` : styles, grille, composants et responsive.
-- `app.js` : données, stockage local, navigation et interactions communes aux pages.
-- `index.html` et `index.js` : la page d'accueil et son rendu.
-- Chaque autre page HTML est rangée à côté de son fichier JavaScript correspondant, par exemple `reset.html` et `reset.js`. Toutes les pages chargent aussi `app.js` pour leurs fonctions communes.
+## Variables d'environnement Vercel
 
-## Pages incluses
-Accueil, recherche et filtres, détail d'annonce, publication, mes annonces, favoris, messages, connexion, inscription, mot de passe oublié, réinitialisation, QuickMatch, recherche personnalisée, alertes, comparaison, sécurité/confiance, tableaux de bord et modération admin.
+Définir dans Production, Preview et Development :
 
-## Limites
-- Les endpoints PHP dans `api/` utilisent PDO et les tables `qa_users` du schéma Aiven fourni pour l'inscription, la connexion, la session, la déconnexion et la modification du profil.
-- Les données de démonstration sont conservées dans le stockage local du navigateur : annonces, favoris, filtres et messages.
-- Les actions de connexion, d'alerte et de modération sont des démonstrations.
-- Les nouvelles annonces restent en attente jusqu’à leur approbation dans l’espace admin. L’admin peut les rechercher, prévisualiser, approuver, refuser ou supprimer après confirmation.
-- Le formulaire d’annonce valide les champs et prévisualise les images avant leur publication.
-- Les connexions client et admin sont des écrans de démonstration uniquement. Il n’y a pas encore de comptes, de mots de passe vérifiés ou de contrôle d’accès sécurisé côté serveur.
-- Le PDF fourni est une planche récapitulative des écrans ; certains détails fins du Figma original (mesures exactes, images, composants ou états non visibles) ne peuvent pas être reproduits au pixel près depuis cette seule planche.
+- `QA_DB_DSN` : DSN PDO MySQL, par exemple `mysql:host=...;port=...;dbname=...;charset=utf8mb4` avec les paramètres fournis par Aiven.
+- `QA_DB_USER` et `QA_DB_PASSWORD` : identifiants Aiven. Ne jamais les mettre dans Git.
 
+`api/config.php` local est ignoré par Git. `api/config.php.example` est le modèle. `vercel.json` configure le runtime PHP pour les fonctions `api/*.php`.
 
+## Sessions sans JWT
+
+L'authentification utilise un jeton aléatoire opaque dans un cookie `HttpOnly`, `SameSite=Lax` et `Secure` en HTTPS. Seul son hash SHA-256 est enregistré dans `qa_sessions`; l'expiration est de 14 jours. Avant le premier déploiement, exécutez une fois [`api/migrations/001_qa_sessions.sql`](api/migrations/001_qa_sessions.sql) dans Aiven.
+
+## Schéma annonces
+
+Les captures ne montrent pas les colonnes de `qa_listings`. L'API reconnaît des variantes courantes, mais a besoin de `id`, titre, prix, propriétaire et statut pour publier et modérer. Les colonnes reconnues sont documentées dans `api/listings.php`.
+
+Les photos sont prévisualisées mais ne sont pas stockées durablement. Il faut connecter Vercel Blob ou S3 pour cela. Favoris, alertes, conversations et messages restent à synchroniser avec leurs tables.
+
+## Développement
+
+Servir le projet via un serveur web avec PHP et les variables d'environnement. `file://` ne permet pas d'appeler l'API.

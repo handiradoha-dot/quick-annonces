@@ -25,7 +25,7 @@ async function apiRequest(path, options = {}) {
   return payload;
 }
 const savedFavorites = readStore("favorites", []);
-const currentUser = readStore("currentUser", null);
+let currentUser = readStore("currentUser", null);
 const savedUsers = readStore("users", []);
 const users = Array.isArray(savedUsers) ? savedUsers : [];
 const state = {
@@ -160,7 +160,8 @@ function matchRow(item, score) { return `<div class="match-row"><div class="mini
 function escapeHTML(value = "") { return String(value).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[ch])); }
 
 let activeRender = null;
-function mountPage(page, renderer) { activeRender = renderer; activeRender(); }
+let databaseReady = Promise.resolve();
+function mountPage(page, renderer) { activeRender = renderer; databaseReady.then(() => activeRender?.()); }
 
 function bindGlobal() {
   $("#logout")?.addEventListener("click", () => {
@@ -244,8 +245,15 @@ function bindGlobal() {
   });
   $("#publish-form")?.addEventListener("submit", e => {
     e.preventDefault(); const fd = new FormData(e.currentTarget); const form = e.currentTarget; const file = fd.get("photo");
-    const createListing = image => {
+    const createListing = async image => {
       const newItem = { id: Math.max(...listings.map(x=>x.id))+1, title: fd.get("title").trim(), price: Number(fd.get("price")), category: fd.get("category"), city: fd.get("city"), age: "A l'instant", type: form.dataset.type || "A vendre", emoji: "📦", image, condition: fd.get("condition").trim(), description: fd.get("description").trim(), seller: "Mariam Tahayekt", verified: false, status: "En attente" };
+      if (apiEnabled) {
+        try {
+          const result = await apiRequest("listings.php", { method: "POST", body: JSON.stringify({ title: newItem.title, price: newItem.price, category: newItem.category, city: newItem.city, type: newItem.type, condition: newItem.condition, description: newItem.description, image: "" }) });
+          location.href = `my-ads.html?submitted=${result.id}`;
+        } catch (error) { toast(error.message); }
+        return;
+      }
       listings.unshift(newItem); saveListings(); location.href = `my-ads.html?submitted=${newItem.id}`;
     };
     if (file instanceof File && file.size) { const reader = new FileReader(); reader.onload = () => createListing(reader.result); reader.onerror = () => toast("Could not read the selected image."); reader.readAsDataURL(file); }
@@ -340,10 +348,31 @@ function bindGlobal() {
   $("#find-form")?.addEventListener("submit", e => { e.preventDefault(); toast("Résultats personnalisés simulés."); $("#personal-results").scrollIntoView({behavior:"smooth",block:"center"}); });
   $("#alert-form")?.addEventListener("submit", e => { e.preventDefault(); toast("Alerte activée en mode démo."); e.currentTarget.insertAdjacentHTML("beforeend", '<div class="notice success">🔔 Votre alerte de démonstration est activée.</div>'); });
   $$("[data-admin-filter]").forEach(btn => btn.addEventListener("click", () => { state.adminFilter = btn.dataset.adminFilter; activeRender(); }));
-  $$("[data-moderate]").forEach(btn => btn.addEventListener("click", () => { const item = listings.find(x => x.id === Number(btn.dataset.id)); if (!item) return; item.status = btn.dataset.moderate; saveListings(); toast(`Annonce ${item.status.toLowerCase()}.`); activeRender(); }));
-  $$("[data-delete]").forEach(btn => btn.addEventListener("click", () => { const item = listings.find(x => x.id === Number(btn.dataset.delete)); if (!item || !window.confirm("Supprimer cette annonce ?")) return; listings.splice(listings.indexOf(item), 1); saveListings(); toast("Annonce supprimee."); activeRender(); }));
+  $$("[data-moderate]").forEach(btn => btn.addEventListener("click", async () => { const item = listings.find(x => x.id === Number(btn.dataset.id)); if (!item) return; if (apiEnabled) { try { await apiRequest("listings.php", { method: "PATCH", body: JSON.stringify({ id: item.id, status: btn.dataset.moderate }) }); await window.QuickAnnonces.refreshListings("?admin=1"); } catch (error) { return toast(error.message); } } else { item.status = btn.dataset.moderate; saveListings(); } toast(`Annonce ${btn.dataset.moderate.toLowerCase()}.`); activeRender(); }));
+  $$("[data-delete]").forEach(btn => btn.addEventListener("click", async () => { const item = listings.find(x => x.id === Number(btn.dataset.delete)); if (!item || !window.confirm("Supprimer cette annonce ?")) return; if (apiEnabled) { try { await apiRequest("listings.php", { method: "DELETE", body: JSON.stringify({ id: item.id }) }); } catch (error) { return toast(error.message); } } listings.splice(listings.indexOf(item), 1); saveListings(); toast("Annonce supprimée."); activeRender(); }));
   $("#admin-search")?.addEventListener("submit", e => { e.preventDefault(); state.adminQuery = new FormData(e.currentTarget).get("q").trim(); activeRender(); });
 }
 
-window.QuickAnnonces = { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, listingCard, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go, readStore };
+if (apiEnabled) {
+  databaseReady = (async () => {
+    try {
+      const [session, data] = await Promise.all([
+        apiRequest("auth.php?action=session").catch(() => ({ user: null })),
+        apiRequest("listings.php")
+      ]);
+      const serverUser = session.user;
+      if (serverUser) {
+        const names = String(serverUser.full_name || "").split(/\s+/);
+        currentUser = { id: serverUser.id, firstName: names.shift() || "", lastName: names.join(" "), email: serverUser.email, role: serverUser.role };
+        writeStore("currentUser", currentUser);
+      } else { currentUser = null; localStorage.removeItem("qa-currentUser"); }
+      listings.splice(0, listings.length, ...(Array.isArray(data.listings) ? data.listings : []));
+    } catch (error) {
+      listings.splice(0, listings.length);
+      setTimeout(() => toast(`Données indisponibles : ${error.message}`), 0);
+    }
+  })();
+}
+
+window.QuickAnnonces = { mountPage, state, listings, categories, money, getListing, currentRoute, shell, cards, listingCard, pageTitle, matchRow, escapeHTML, statusText, saveListings, toast, go, readStore, apiRequest, isApiEnabled: apiEnabled, getCurrentUser: () => currentUser, refreshListings: async (query = "") => { const data = await apiRequest(`listings.php${query}`); listings.splice(0, listings.length, ...(data.listings || [])); return listings; } };
 })();

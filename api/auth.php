@@ -22,7 +22,7 @@ if ($action === 'register' && $method === 'POST') {
         }
         throw $exception;
     }
-    $_SESSION['user_id'] = (int)database()->lastInsertId();
+    setAuthenticatedUser((int)database()->lastInsertId());
     jsonResponse(['user' => authenticatedUser()], 201);
 }
 
@@ -36,7 +36,7 @@ if ($action === 'login' && $method === 'POST') {
     if (!$user || !password_verify($password, $user['password_hash'])) {
         jsonResponse(['error' => 'E-mail ou mot de passe incorrect.'], 401);
     }
-    $_SESSION['user_id'] = (int)$user['id'];
+    setAuthenticatedUser((int)$user['id']);
     unset($user['password_hash']);
     jsonResponse(['user' => $user]);
 }
@@ -46,8 +46,7 @@ if ($action === 'session' && $method === 'GET') {
 }
 
 if ($action === 'logout' && $method === 'POST') {
-    $_SESSION = [];
-    session_destroy();
+    revokeAuthSession();
     jsonResponse(['ok' => true]);
 }
 
