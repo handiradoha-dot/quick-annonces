@@ -24,6 +24,14 @@ async function apiRequest(path, options = {}) {
   if (!response.ok) throw new Error(payload.error || "Une erreur serveur est survenue.");
   return payload;
 }
+async function apiUpload(file) {
+  const formData = new FormData();
+  formData.append('photo', file);
+  const response = await fetch('api/media.php', { method: 'POST', credentials: 'same-origin', body: formData });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Échec de l’envoi de la photo.');
+  return payload.url;
+}
 const savedFavorites = readStore("favorites", []);
 let currentUser = readStore("currentUser", null);
 const savedUsers = readStore("users", []);
@@ -249,7 +257,8 @@ function bindGlobal() {
       const newItem = { id: Math.max(...listings.map(x=>x.id))+1, title: fd.get("title").trim(), price: Number(fd.get("price")), category: fd.get("category"), city: fd.get("city"), age: "A l'instant", type: form.dataset.type || "A vendre", emoji: "📦", image, condition: fd.get("condition").trim(), description: fd.get("description").trim(), seller: "Mariam Tahayekt", verified: false, status: "En attente" };
       if (apiEnabled) {
         try {
-          const result = await apiRequest("listings.php", { method: "POST", body: JSON.stringify({ title: newItem.title, price: newItem.price, category: newItem.category, city: newItem.city, type: newItem.type, condition: newItem.condition, description: newItem.description, image: "" }) });
+          const imageUrl = file instanceof File && file.size ? await apiUpload(file) : "";
+          const result = await apiRequest("listings.php", { method: "POST", body: JSON.stringify({ title: newItem.title, price: newItem.price, category: newItem.category, city: newItem.city, type: newItem.type, condition: newItem.condition, description: newItem.description, image: imageUrl }) });
           location.href = `my-ads.html?submitted=${result.id}`;
         } catch (error) { toast(error.message); }
         return;
@@ -359,7 +368,7 @@ if (apiEnabled) {
       const [session, data, categoryData] = await Promise.all([
         apiRequest("auth.php?action=session").catch(() => ({ user: null })),
         apiRequest("listings.php").then(result => ({ result })).catch(error => ({ error })),
-        apiRequest("categories.php").catch(() => ({ categories: null }))
+        apiRequest("categories.php").then(result => ({ result })).catch(error => ({ error }))
       ]);
       const serverUser = session.user;
       if (serverUser) {
@@ -369,13 +378,13 @@ if (apiEnabled) {
       } else { currentUser = null; localStorage.removeItem("qa-currentUser"); }
       listings.splice(0, listings.length, ...(Array.isArray(data.result?.listings) ? data.result.listings : []));
       if (data.error) setTimeout(() => toast(`Les annonces n'ont pas pu être chargées : ${data.error.message}`), 0);
-      if (Array.isArray(categoryData.categories)) {
-        categories.splice(0, categories.length, ...categoryData.categories.map(category => category.name));
+      if (Array.isArray(categoryData.result?.categories)) {
+        categories.splice(0, categories.length, ...categoryData.result.categories.map(category => category.name));
         if (state.category !== "Toutes les catégories" && !categories.includes(state.category)) {
           state.category = "Toutes les catégories";
           saveFilters();
         }
-      }
+      } else if (categoryData.error) setTimeout(() => toast(`Les catégories DB n'ont pas pu être chargées : ${categoryData.error.message}`), 0);
     } catch (error) {
       listings.splice(0, listings.length);
       setTimeout(() => toast(`Données indisponibles : ${error.message}`), 0);

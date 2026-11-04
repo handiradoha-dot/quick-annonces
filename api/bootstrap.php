@@ -29,7 +29,7 @@ function database()
     $config = require $configPath;
     if (empty($config['ssl_ca']) && is_file(__DIR__ . '/ca.pem')) $config['ssl_ca'] = __DIR__ . '/ca.pem';
     if (empty($config['dsn']) || empty($config['username']) || empty($config['password'])) {
-        jsonResponse(['error' => 'Variables DB manquantes : QA_DB_DSN, QA_DB_USER et QA_DB_PASSWORD.'], 503);
+        jsonResponse(['error' => 'Variables DB manquantes : DB_HOST, DB_PORT, DB_USER et DB_PASSWORD (ou leurs équivalents QA_DB_*).'], 503);
     }
     $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC];
     if (!empty($config['ssl_ca']) && defined('PDO::MYSQL_ATTR_SSL_CA')) {

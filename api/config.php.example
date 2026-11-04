@@ -1,8 +1,16 @@
 <?php
 
+$dsn = getenv('QA_DB_DSN') ?: '';
+if (!$dsn && getenv('DB_HOST')) {
+    $host = getenv('DB_HOST');
+    $port = getenv('DB_PORT') ?: '3306';
+    $database = getenv('DB_NAME') ?: 'gestionproduit_v2';
+    $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=utf8mb4";
+}
+
 return [
-    'dsn' => getenv('QA_DB_DSN') ?: '',
-    'username' => getenv('QA_DB_USER') ?: '',
-    'password' => getenv('QA_DB_PASSWORD') ?: '',
+    'dsn' => $dsn,
+    'username' => getenv('QA_DB_USER') ?: (getenv('DB_USER') ?: ''),
+    'password' => getenv('QA_DB_PASSWORD') ?: (getenv('DB_PASSWORD') ?: ''),
     'ssl_ca' => getenv('QA_DB_SSL_CA') ?: '',
 ];

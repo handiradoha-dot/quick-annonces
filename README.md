@@ -8,10 +8,13 @@ Le certificat public Aiven est versionné dans `api/ca.pem`. L'API charge ce fic
 
 ## Variables d'environnement Vercel
 
-Définir dans Production, Preview et Development :
+Définir dans Production (et Preview/Development si nécessaire) :
 
-- `QA_DB_DSN` : DSN PDO MySQL, par exemple `mysql:host=...;port=...;dbname=...;charset=utf8mb4` avec les paramètres fournis par Aiven.
-- `QA_DB_USER` et `QA_DB_PASSWORD` : identifiants Aiven. Ne jamais les mettre dans Git.
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` : valeurs fournies par Aiven.
+- `DB_NAME` : nom de la base; facultatif si la base s'appelle `gestionproduit_v2`.
+- `CLOUDINARY_URL` : URL de connexion du produit Cloudinary. Cette variable est lue uniquement par l'API PHP et ne doit jamais être envoyée au navigateur.
+
+L'API accepte aussi `QA_DB_DSN`, `QA_DB_USER` et `QA_DB_PASSWORD` si tu préfères le format DSN.
 
 `api/config.php` local est ignoré par Git. `api/config.php.example` est le modèle. `vercel.json` configure `vercel-php@0.9.0`, qui nécessite Node.js 22; `package.json` fixe cette version pour le build Vercel.
 
@@ -23,7 +26,7 @@ L'authentification utilise un jeton aléatoire opaque dans un cookie `HttpOnly`,
 
 Les captures ne montrent pas les colonnes de `qa_listings`. L'API reconnaît des variantes courantes, mais a besoin de `id`, titre, prix, propriétaire et statut pour publier et modérer. Les colonnes reconnues sont documentées dans `api/listings.php`.
 
-Les photos sont prévisualisées mais ne sont pas stockées durablement. Il faut connecter Vercel Blob ou S3 pour cela. Favoris, alertes, conversations et messages restent à synchroniser avec leurs tables.
+Les photos sont envoyées par le serveur à Cloudinary, puis leur URL est enregistrée dans l'annonce. Favoris, alertes, conversations et messages restent à synchroniser avec leurs tables.
 
 ## Développement
 
