@@ -13,7 +13,7 @@ Définir dans Production, Preview et Development :
 - `QA_DB_DSN` : DSN PDO MySQL, par exemple `mysql:host=...;port=...;dbname=...;charset=utf8mb4` avec les paramètres fournis par Aiven.
 - `QA_DB_USER` et `QA_DB_PASSWORD` : identifiants Aiven. Ne jamais les mettre dans Git.
 
-`api/config.php` local est ignoré par Git. `api/config.php.example` est le modèle. `vercel.json` configure le runtime PHP pour les fonctions `api/*.php`.
+`api/config.php` local est ignoré par Git. `api/config.php.example` est le modèle. `vercel.json` configure `vercel-php@0.9.0`, qui nécessite Node.js 22; `package.json` fixe cette version pour le build Vercel.
 
 ## Sessions sans JWT
 
