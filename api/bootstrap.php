@@ -1,5 +1,7 @@
 <?php
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
 header('Content-Type: application/json; charset=utf-8');
 
 function jsonResponse(array $payload, $status = 200)
@@ -35,9 +37,14 @@ function database()
         jsonResponse(['error' => 'Variables DB manquantes : DB_HOST, DB_PORT, DB_USER et DB_PASSWORD (ou leurs équivalents QA_DB_*).'], 503);
     }
     $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC];
-    if (!empty($config['ssl_ca']) && defined('PDO::MYSQL_ATTR_SSL_CA')) {
-        $options[PDO::MYSQL_ATTR_SSL_CA] = $config['ssl_ca'];
-        if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    if (!empty($config['ssl_ca'])) {
+        if (class_exists('Pdo\\Mysql')) {
+            $options[\Pdo\Mysql::ATTR_SSL_CA] = $config['ssl_ca'];
+            $options[\Pdo\Mysql::ATTR_SSL_VERIFY_SERVER_CERT] = true;
+        } elseif (PHP_VERSION_ID < 80500 && defined('PDO::MYSQL_ATTR_SSL_CA')) {
+            $options[PDO::MYSQL_ATTR_SSL_CA] = $config['ssl_ca'];
+            if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+        }
     }
     try {
         $pdo = new PDO($config['dsn'], $config['username'], $config['password'], $options);
