@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+$_GET['route'] = 'admin/listings' . ($id ? '/' . $id : '');
+require dirname(__DIR__) . '/router.php';

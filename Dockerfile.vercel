@@ -1,0 +1,21 @@
+FROM dunglas/frankenphp:1-php8.4-alpine AS base
+WORKDIR /app
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && install-php-extensions pdo_mysql mbstring curl
+
+FROM base AS dependencies
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN apk add --no-cache unzip
+COPY composer.json ./
+# Generate the dependency lock during the image build until Composer is available
+# locally to commit composer.lock. Replace this with composer install once locked.
+RUN composer update --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+
+FROM base AS runtime
+COPY --from=dependencies /app/vendor ./vendor
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY . .
+
+ENV PORT=80
+EXPOSE 80
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]

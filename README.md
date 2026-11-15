@@ -1,28 +1,58 @@
 # QuickAnnonces
 
-Application statique sur Vercel avec API PHP, MySQL Aiven et Cloudinary.
+QuickAnnonces serves one home page at `public/index.html`, with dedicated login, registration, account, and admin pages in `public/`. The PHP endpoints are organized under `api/`, configuration under `config/`, and shared helpers under `includes/`. Form requests go to PHP, which stores records in Aiven MySQL and uploads photos to Cloudinary. The root `Dockerfile.vercel` runs the app with FrankenPHP on Vercel.
 
-## Variables Vercel
+## Before deploying
 
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
-- `DB_NAME` si différent de `gestionproduit_v2`
-- `CLOUDINARY_URL`
+1. Load `quickannonces_database.sql` into the Aiven database named `quickannonces`. The SQL creates the database and tables; it is written for a new, empty database. If you already imported it into Aiven's `defaultdb`, set `DB_NAME=defaultdb` instead.
+2. Set the environment variables listed below in Vercel for Preview and Production, then redeploy.
+3. The app expects users to register; there is no seeded administrator. Promote the intended admin account directly in MySQL by setting its `users.role` to `admin` after registration.
+4. Use a new Cloudinary API secret. The value pasted in chat appears to be a secret, not the API key, so rotate it before using Cloudinary in production.
 
-Le certificat Aiven public est versionné dans `api/ca.pem`. `api/config.php.example` lit les variables d'environnement; le fichier local `api/config.php` est ignoré par Git.
+## Vercel environment variables
 
-## Données et migrations
+| Name | Value |
+| --- | --- |
+| `DB_HOST` | Aiven host: `mysql-34da4a91-quick-announce-2.c.aivencloud.com` |
+| `DB_PORT` | `20440` |
+| `DB_NAME` | `quickannonces` if you ran the supplied SQL unchanged; otherwise the database where you imported the schema |
+| `DB_USER` | `avnadmin` |
+| `DB_PASSWORD` | The Aiven password from the service console; do not paste it into chat or source files |
+| `CLOUDINARY_CLOUD_NAME` | `xth8g9ff` |
+| `CLOUDINARY_API_KEY` | The API key shown in Cloudinary |
+| `CLOUDINARY_API_SECRET` | A newly rotated Cloudinary API secret |
+| `AUTH_SECRET` | A random secret with at least 32 characters |
 
-- Les comptes utilisent `qa_users`; les sessions sans JWT utilisent `qa_sessions`.
-- Les catégories viennent de `qa_categories`.
-- L'accueil lit directement les annonces de `produit`. Les anciens produits restent visibles même si les tables applicatives sont absentes.
-- `qa_listing_meta` relie les annonces à leur vendeur et stocke ville, description et état de modération.
-- Favoris, alertes, conversations et messages utilisent `qa_favorites`, `qa_alerts`, `qa_conversations` et `qa_messages`.
-- Les commentaires utilisent `qa_comments`.
+The public Aiven CA certificate `ca.pem` is included at the project root and used directly for the database TLS connection. TLS verification stays enabled.
 
-L'API ne crée plus de tables à l'exécution et n'a donc pas besoin du droit `CREATE`. Exécuter une fois dans Aiven, avec un utilisateur autorisé, les scripts `api/migrations/001_qa_sessions.sql` et `api/migrations/002_app_tables.sql`. Le `DB_USER` de Vercel a ensuite seulement besoin des droits de lecture/écriture sur les tables utilisées.
+Copy `.env.example` to local environment configuration only for local development. PHP does not load `.env` files by default; export the values in the process environment or use Vercel's development environment integration.
 
-Les images sont envoyées à Cloudinary par l'API; leur URL est stockée dans `produit.photoProduit`.
+## Local setup
 
-## Déploiement
+Use PHP 8.4, Composer 2, Docker, and the Vercel CLI. Install the Cloudinary SDK with Composer and commit both `composer.json` and `composer.lock`. Then build the `Dockerfile.vercel` image and exercise `/api/health.php` and the application with configured environment variables.
 
-Après un push vers la branche connectée à Vercel, vérifier `/api/health.php` et `/api/categories.php`.
+There is no `composer.lock` yet because Composer is not installed in this workspace. The current container build resolves the SDK during image build; generate and commit the lockfile with Composer before treating the build as reproducible.
+
+## Backend layout
+
+- `config/db.php` and `config/env.php` provide database, Cloudinary, and environment setup.
+- `api/auth/`, `api/users/`, `api/annonces/`, and `api/admin/` contain the PHP endpoints.
+- `includes/` contains authentication, shared functions, and security helpers.
+- `public/` contains the single home page, login, registration, account, and admin HTML pages plus the shared frontend assets.
+
+## Current feature coverage
+
+- Accounts: registration, login, logout, password hashing, signed one-week HttpOnly cookies and CSRF tokens.
+- Listings: approved listing search/detail, create (pending moderation), owner's listings, edit and delete API operations.
+- Photos: JPG, PNG and WebP uploads up to 8 MB each (maximum five per listing) go from PHP to Cloudinary; URLs and public IDs are stored in MySQL.
+- Favorites, comments, buyer/seller conversations and messages, saved search alerts, and administrator moderation API.
+- The active frontend and its CSS/JavaScript live in `public/`; the JSON API has separate endpoint files under `api/`.
+
+## Known setup gaps
+
+- Password reset cannot send email yet; no mail provider credentials or service were supplied.
+- Registration does not verify email or phone; the original design's verification badges are not implemented as real verification.
+- Dashboard analytics, QuickMatch recommendations, comparison, and seller profile screens are still design demonstrations; their backend workflows are not connected yet.
+- The uploaded SQL must be applied to Aiven before the app can use its API. No Aiven password was supplied, so the live connection could not be checked here.
+- This workspace does not have PHP, Composer, Docker or the Vercel CLI available. PHP syntax, Composer resolution, container build, external connections, and Vercel Preview therefore remain unverified.
+- Use Vercel's Container preset if the project is detected as a different framework. `Dockerfile.vercel` is intentionally named to take precedence when another framework is detected.

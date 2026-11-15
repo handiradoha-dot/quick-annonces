@@ -1,0 +1,14 @@
+{
+  "name": "quickannonces/app",
+  "description": "QuickAnnonces PHP API and static frontend",
+  "type": "project",
+  "require": {
+    "php": "^8.2",
+    "cloudinary/cloudinary_php": "^3.1"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}
+

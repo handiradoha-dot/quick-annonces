@@ -1,1 +1,9 @@
-api/config.php
+.env
+.env.*
+!.env.example
+/vendor/
+/.vercel/
+/node_modules/
+/storage/*
+!/storage/.gitkeep
+
