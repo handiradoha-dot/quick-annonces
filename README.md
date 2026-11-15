@@ -7,7 +7,6 @@ QuickAnnonces serves one home page at `public/index.html`, with dedicated login,
 1. Load `quickannonces_database.sql` into the Aiven database named `quickannonces`. The SQL creates the database and tables; it is written for a new, empty database. If you already imported it into Aiven's `defaultdb`, set `DB_NAME=defaultdb` instead.
 2. Set the environment variables listed below in Vercel for Preview and Production, then redeploy.
 3. The app expects users to register; there is no seeded administrator. Promote the intended admin account directly in MySQL by setting its `users.role` to `admin` after registration.
-4. Use a new Cloudinary API secret. The value pasted in chat appears to be a secret, not the API key, so rotate it before using Cloudinary in production.
 
 ## Vercel environment variables
 
@@ -15,13 +14,15 @@ QuickAnnonces serves one home page at `public/index.html`, with dedicated login,
 | --- | --- |
 | `DB_HOST` | Aiven host: `mysql-34da4a91-quick-announce-2.c.aivencloud.com` |
 | `DB_PORT` | `20440` |
-| `DB_NAME` | `quickannonces` if you ran the supplied SQL unchanged; otherwise the database where you imported the schema |
+| `DB_NAME` | `defaultdb` for the current Aiven setup, where the tables were created |
 | `DB_USER` | `avnadmin` |
 | `DB_PASSWORD` | The Aiven password from the service console; do not paste it into chat or source files |
 | `CLOUDINARY_CLOUD_NAME` | `xth8g9ff` |
 | `CLOUDINARY_API_KEY` | The API key shown in Cloudinary |
-| `CLOUDINARY_API_SECRET` | A newly rotated Cloudinary API secret |
+| `CLOUDINARY_API_SECRET` | Your current Cloudinary API secret; keep it private |
 | `AUTH_SECRET` | A random secret with at least 32 characters |
+
+Keep `DB_PASSWORD`, `CLOUDINARY_API_SECRET`, and `AUTH_SECRET` in Vercel environment variables. Never commit their values to the repository or share them in chat.
 
 The public Aiven CA certificate `ca.pem` is included at the project root and used directly for the database TLS connection. TLS verification stays enabled.
 
