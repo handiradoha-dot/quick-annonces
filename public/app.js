@@ -290,22 +290,21 @@ async function apiRequest(path, options = {}) {
   const route = queryAt < 0 ? path : path.slice(0, queryAt);
   const query = new URLSearchParams(queryAt < 0 ? "" : path.slice(queryAt + 1));
   let endpoint;
-  if (route.startsWith("auth/")) endpoint = `/api/auth/${route.slice(5)}.php`;
-  else if (route === "categories") endpoint = "/api/annonces/categories.php";
-  else if (route === "listings" || route.startsWith("listings?")) endpoint = "/api/annonces/index.php";
-  else if (route === "me/listings") endpoint = "/api/users/annonces.php";
+  if (route.startsWith("auth/")) endpoint = `/api/auth/${route.slice(5)}`;
+  else if (route === "categories") endpoint = "/api/categories";
+  else if (route === "listings") endpoint = "/api/listings";
+  else if (route === "me/listings") endpoint = "/api/me/listings";
   else if (route === "favorites" || route.startsWith("favorites/")) {
-    endpoint = "/api/users/favorites.php";
-    const id = route.match(/^favorites\/(\d+)$/)?.[1]; if (id) query.set("id", id);
+    const id = route.match(/^favorites\/(\d+)$/)?.[1];
+    endpoint = id ? `/api/favorites/${id}` : "/api/favorites";
   } else if (route === "conversations" || route.startsWith("conversations/")) {
-    endpoint = "/api/users/conversations.php";
     const match = route.match(/^conversations\/(\d+)\/messages$/);
-    if (match) { query.set("id", match[1]); query.set("messages", "1"); }
-  } else if (route === "alerts") endpoint = "/api/users/alerts.php";
-  else if (route === "admin/listings" || route.startsWith("admin/listings?")) endpoint = "/api/admin/annonces.php";
-  else if (route.startsWith("admin/listings/")) { endpoint = "/api/admin/annonces.php"; query.set("id", route.split("/")[2]); }
-  else if (route.startsWith("listings/") && route.endsWith("/comments")) { endpoint = "/api/annonces/comments.php"; query.set("id", route.split("/")[1]); }
-  else if (route.startsWith("listings/")) { endpoint = "/api/annonces/item.php"; query.set("id", route.split("/")[1]); }
+    endpoint = match ? `/api/conversations/${match[1]}/messages` : "/api/conversations";
+  } else if (route === "alerts") endpoint = "/api/alerts";
+  else if (route === "admin/listings") endpoint = "/api/admin/listings";
+  else if (route.startsWith("admin/listings/")) endpoint = `/api/admin/listings/${route.split("/")[2]}`;
+  else if (route.startsWith("listings/") && route.endsWith("/comments")) endpoint = `/api/listings/${route.split("/")[1]}/comments`;
+  else if (route.startsWith("listings/")) endpoint = `/api/listings/${route.split("/")[1]}`;
   else throw new Error("API route not configured.");
   const queryString = query.toString();
   if (queryString) endpoint += `?${queryString}`;

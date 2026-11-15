@@ -30,7 +30,7 @@ Copy `.env.example` to local environment configuration only for local developmen
 
 ## Local setup
 
-Use PHP 8.4, Composer 2, Docker, and the Vercel CLI. Install the Cloudinary SDK with Composer and commit both `composer.json` and `composer.lock`. Then build the `Dockerfile.vercel` image and exercise `/api/health.php` and the application with configured environment variables.
+Use PHP 8.4, Composer 2, Docker, and the Vercel CLI. Install the Cloudinary SDK with Composer and commit both `composer.json` and `composer.lock`. Then build the `Dockerfile.vercel` image and exercise `/api/health` and the application with configured environment variables.
 
 There is no `composer.lock` yet because Composer is not installed in this workspace. The current container build resolves the SDK during image build; generate and commit the lockfile with Composer before treating the build as reproducible.
 
