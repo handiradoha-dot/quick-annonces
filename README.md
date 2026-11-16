@@ -8,6 +8,8 @@ QuickAnnonces serves one home page at `public/index.html`, with dedicated login,
 2. Set the environment variables listed below in Vercel for Preview and Production, then redeploy.
 3. The app expects users to register; there is no seeded administrator. Promote the intended admin account directly in MySQL by setting its `users.role` to `admin` after registration.
 
+For the existing Aiven setup, run `quickannonces_expiration_functions.sql` once against `defaultdb` to add announcement publication/expiration dates and the expiration function/procedure. Back up the database before applying schema changes.
+
 ## Vercel environment variables
 
 | Name | Value |
