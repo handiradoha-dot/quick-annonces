@@ -3,16 +3,19 @@
 }
 
 :{$PORT:80} {
-	route /api/* {
-		@php path_regexp php ^/api/.*\.php$
+	# Strip /api once so direct PHP aliases resolve from /app/api.
+	handle_path /api/* {
+		root * /app/api
+
+		@php path *.php
 		handle @php {
-			uri strip_prefix /api
-			root * /app/api
 			php_server
 		}
+
+		# Clean API paths go through the central router. Keep incoming filters,
+		# status values, and other query parameters when rewriting the URI.
 		handle {
 			rewrite * /router.php?route={path}&{query}
-			root * /app/api
 			php_server
 		}
 	}
