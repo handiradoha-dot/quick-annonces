@@ -35,7 +35,7 @@ const listings = [
   { id: 11, title: "Baskets Nike", price: 850, category: "Mode", city: "Tanger", age: "Il y a 3 h", type: "À vendre", emoji: "👟", condition: "Neuf", description: "Baskets confortables. Taille à confirmer avec le vendeur.", seller: "Yasmine Benali", verified: true },
   { id: 12, title: "Montre connectée", price: 700, category: "Électronique", city: "Tanger", age: "Hier", type: "À vendre", emoji: "⌚", condition: "Très bon état", description: "Montre connectée avec chargeur.", seller: "Sarah El Idrissi", verified: true }
 ];
-const categories = ["Immobilier", "Véhicules", "Électronique", "Mode", "Maison & Jardin", "Sports", "Services"];
+const categories = [];
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
 const getListing = id => listings.find(item => item.id === Number(id)) || listings[0];
 const icon = name => ({ home: "⌂", search: "⌕", heart: "♡", user: "♙", plus: "+" }[name] || "•");
@@ -339,6 +339,12 @@ async function refreshListings() {
     toast(`Serveur indisponible : ${error.message}`);
   }
 }
+async function refreshCategories() {
+  const { categories: rows } = await apiRequest("categories");
+  if (!Array.isArray(rows)) throw new Error("La liste des catégories est invalide.");
+  categories.splice(0, categories.length, ...rows.map(row => String(row.name)));
+  render();
+}
 function showApiError(error) { toast(error.message || "Une erreur est survenue."); }
 document.addEventListener("click", async event => {
   const profileToggle = event.target.closest?.("[data-profile-toggle]");
@@ -521,6 +527,8 @@ async function startBackend() {
     return;
   }
   try {
+    try { await refreshCategories(); }
+    catch (error) { console.error("Could not load SQL categories:", error); toast(`Catégories SQL indisponibles : ${error.message}`); }
     const session = await apiRequest("auth/me"); state.currentUser = session.user; state.csrf = session.csrf;
     await refreshListings();
     if (currentRoute().page === "admin" && state.currentUser?.role === "admin") await loadAdmin();
