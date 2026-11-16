@@ -18,11 +18,15 @@ function db(): PDO
     $port = envValue('DB_PORT', '3306');
     if (!$host || !$name || !$user || !$password) throw new RuntimeException('Database configuration is incomplete.');
 
-    $ca = dirname(__DIR__) . '/ca.pem';
+    $ca = __DIR__ . '/../ca.pem';
     if (!is_file($ca)) throw new RuntimeException('Database TLS certificate is unavailable.');
 
-    $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false];
-    if (defined('PDO::MYSQL_ATTR_SSL_CA')) $options[PDO::MYSQL_ATTR_SSL_CA] = $ca;
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::MYSQL_ATTR_SSL_CA => __DIR__ . '/../ca.pem',
+    ];
     if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
     $pdo = new PDO("mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4", $user, $password, $options);
     return $pdo;
