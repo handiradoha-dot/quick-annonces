@@ -4,9 +4,17 @@
 
 :{$PORT:80} {
 	route /api/* {
-		uri strip_prefix /api
-		root * /app/api
-		php_server
+		@php path_regexp php ^/api/.*\.php$
+		handle @php {
+			uri strip_prefix /api
+			root * /app/api
+			php_server
+		}
+		handle {
+			rewrite * /router.php?route={path}&{query}
+			root * /app/api
+			php_server
+		}
 	}
 
 	route {

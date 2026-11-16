@@ -35,7 +35,7 @@ const listings = [
   { id: 11, title: "Baskets Nike", price: 850, category: "Mode", city: "Tanger", age: "Il y a 3 h", type: "À vendre", emoji: "👟", condition: "Neuf", description: "Baskets confortables. Taille à confirmer avec le vendeur.", seller: "Yasmine Benali", verified: true },
   { id: 12, title: "Montre connectée", price: 700, category: "Électronique", city: "Tanger", age: "Hier", type: "À vendre", emoji: "⌚", condition: "Très bon état", description: "Montre connectée avec chargeur.", seller: "Sarah El Idrissi", verified: true }
 ];
-const categories = [];
+const categories = ["Immobilier", "Véhicules", "Électronique", "Mode", "Maison & Jardin", "Sports", "Services"];
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
 const getListing = id => listings.find(item => item.id === Number(id)) || listings[0];
 const icon = name => ({ home: "⌂", search: "⌕", heart: "♡", user: "♙", plus: "+" }[name] || "•");
