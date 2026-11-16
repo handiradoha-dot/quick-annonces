@@ -1,4 +1,23 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "container"
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/health.php" },
+    { "source": "/api/auth/register", "destination": "/api/auth/register.php" },
+    { "source": "/api/auth/login", "destination": "/api/auth/login.php" },
+    { "source": "/api/auth/logout", "destination": "/api/auth/logout.php" },
+    { "source": "/api/auth/me", "destination": "/api/auth/me.php" },
+    { "source": "/api/auth/forgot", "destination": "/api/auth/forgot.php" },
+    { "source": "/api/categories", "destination": "/api/annonces/categories.php" },
+    { "source": "/api/listings/:id/comments", "destination": "/api/annonces/comments.php" },
+    { "source": "/api/listings/:id", "destination": "/api/annonces/item.php" },
+    { "source": "/api/listings", "destination": "/api/annonces/index.php" },
+    { "source": "/api/me/listings", "destination": "/api/users/annonces.php" },
+    { "source": "/api/favorites/:id", "destination": "/api/users/favorites.php" },
+    { "source": "/api/favorites", "destination": "/api/users/favorites.php" },
+    { "source": "/api/conversations/:id/messages", "destination": "/api/users/conversations.php?messages=1" },
+    { "source": "/api/conversations", "destination": "/api/users/conversations.php" },
+    { "source": "/api/alerts", "destination": "/api/users/alerts.php" },
+    { "source": "/api/admin/listings/:id", "destination": "/api/admin/annonces.php" },
+    { "source": "/api/admin/listings", "destination": "/api/admin/annonces.php" }
+  ]
 }
