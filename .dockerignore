@@ -2,6 +2,11 @@
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+!ca.pem
+*.p12
+*.pfx
 vendor
 node_modules
 .vercel

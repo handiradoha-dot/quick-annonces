@@ -1,9 +1,13 @@
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+!ca.pem
+*.p12
+*.pfx
 /vendor/
 /.vercel/
 /node_modules/
 /storage/*
 !/storage/.gitkeep
-
