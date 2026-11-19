@@ -28,7 +28,7 @@ Keep `DB_PASSWORD`, `CLOUDINARY_API_SECRET`, and `AUTH_SECRET` in Vercel environ
 
 The public Aiven CA certificate `ca.pem` is included at the project root and used directly for the database TLS connection. TLS verification stays enabled.
 
-Copy `.env.example` to local environment configuration only for local development. PHP does not load `.env` files by default; export the values in the process environment or use Vercel's development environment integration.
+For local development, copy `.env.example` to `.env` and replace the placeholders with your rotated credentials and a random `AUTH_SECRET` of at least 32 characters. `config/env.php` loads `.env` locally; environment variables already set by the process take precedence. `.env` is ignored by Git. In Vercel, set the same variable names in Project Settings → Environment Variables, then redeploy.
 
 ## Local setup
 
