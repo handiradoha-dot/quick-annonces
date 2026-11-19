@@ -7,6 +7,7 @@
     { "source": "/api/auth/logout", "destination": "/api/auth/logout.php" },
     { "source": "/api/auth/me", "destination": "/api/auth/me.php" },
     { "source": "/api/auth/forgot", "destination": "/api/auth/forgot.php" },
+    { "source": "/api/auth/reset", "destination": "/api/auth/reset.php" },
     { "source": "/api/categories", "destination": "/api/annonces/categories.php" },
     { "source": "/api/listings/:id/comments", "destination": "/api/annonces/comments.php" },
     { "source": "/api/listings/:id", "destination": "/api/annonces/item.php" },
