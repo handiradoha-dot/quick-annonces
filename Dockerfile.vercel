@@ -15,6 +15,8 @@ FROM base AS runtime
 COPY --from=dependencies /app/vendor ./vendor
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY . .
+# The base image ships a FrankenPHP welcome page that would shadow index.html.
+RUN rm -f /app/public/index.php
 
 ENV PORT=80
 EXPOSE 80
