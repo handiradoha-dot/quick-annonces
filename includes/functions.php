@@ -52,3 +52,46 @@ function saveImage(PDO $pdo, int $adId, array $file, int $position): void
     $q = $pdo->prepare('INSERT INTO annonce_images (annonce_id, cloudinary_public_id, image_url, position) VALUES (?, ?, ?, ?)');
     $q->execute([$adId, $publicId, $secureUrl, $position]);
 }
+
+// Base URL used in emailed links. Never derived from the request Host header,
+// which a client controls.
+function appUrl(): ?string
+{
+    $url = envValue('APP_URL');
+    if (!$url && envValue('VERCEL_PROJECT_PRODUCTION_URL')) $url = 'https://' . envValue('VERCEL_PROJECT_PRODUCTION_URL');
+    return $url ? rtrim($url, '/') : null;
+}
+
+function mailConfigured(): bool
+{
+    return (bool)(envValue('RESEND_API_KEY') && envValue('MAIL_FROM'));
+}
+
+// Sends a plain-text email through the Resend HTTP API (https://resend.com).
+function sendMail(string $to, string $subject, string $text): void
+{
+    $ch = curl_init('https://api.resend.com/emails');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . envValue('RESEND_API_KEY'), 'Content-Type: application/json'],
+        CURLOPT_POSTFIELDS => json_encode(['from' => envValue('MAIL_FROM'), 'to' => [$to], 'subject' => $subject, 'text' => $text], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ]);
+    $body = curl_exec($ch);
+    $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+    if ($body === false || $status < 200 || $status >= 300) throw new RuntimeException('Email delivery failed with status ' . $status . '.');
+}
+
+// When the expiration migration has been applied, an approved listing is
+// published today and expires 30 days later. Without the migration the
+// columns do not exist and this is skipped.
+function setPublicationDates(PDO $pdo, int $id): void
+{
+    try {
+        $pdo->prepare('UPDATE annonce SET date_publication=CURDATE(), date_expiration=DATE_ADD(CURDATE(), INTERVAL 30 DAY) WHERE id=?')->execute([$id]);
+    } catch (PDOException $e) {
+        if ($e->getCode() !== '42S22') throw $e;
+    }
+}
