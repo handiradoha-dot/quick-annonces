@@ -1,6 +1,5 @@
-﻿/* QuickAnnonces — front-end uniquement
-   Navigation par hash, données de démonstration et interactions locales.
-   Aucune API / base de données n'est connectée. */
+/* QuickAnnonces — front-end
+   Navigation par hash ; les données viennent de l'API PHP (/api/...). */
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const app = $("#app");
@@ -15,6 +14,7 @@ const state = {
   conversations: [],
   alerts: [],
   adminFilter: "pending",
+  searchResults: null,
   apiStatus: "loading",
   categoryStatus: "loading",
   apiError: ""
@@ -25,6 +25,7 @@ const categories = [];
 const categorySlugs = new Map();
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
 const getListing = id => listings.find(item => item.id === Number(id)) || null;
+const loginPrompt = text => `<div class="empty">${escapeHTML(text)}<p><a href="./login.html" class="btn btn-primary">Se connecter</a></p></div>`;
 const icon = name => ({ home: "⌂", search: "⌕", heart: "♡", user: "♙", plus: "+" }[name] || "•");
 
 function toast(message) {
@@ -76,7 +77,7 @@ function header(active = "") {
   </nav></header>`;
 }
 function footer() {
-  return `<footer class="footer"><div class="footer-inner"><a class="logo" href="#/home"><span class="logo-mark">Q</span>QuickAnnonces</a><span>Achetez, vendez et trouvez près de chez vous.</span><span>© 2026 QuickAnnonces · Front-end de démonstration</span></div></footer>`;
+  return `<footer class="footer"><div class="footer-inner"><a class="logo" href="#/home"><span class="logo-mark">Q</span>QuickAnnonces</a><span>Achetez, vendez et trouvez près de chez vous.</span><span>© 2026 QuickAnnonces</span></div></footer>`;
 }
 function shell(content, active = "") { app.innerHTML = header(active) + `<main class="container">${content}</main>` + footer(); bindGlobal(); }
 function listingCard(item) {
@@ -114,9 +115,9 @@ function homePage() {
 }
 function searchPage() {
   const q = new URLSearchParams(location.search).get("q") || state.query;
-  let results = listings.filter(x => (!q || x.title.toLowerCase().includes(q.toLowerCase()) || x.category.toLowerCase().includes(q.toLowerCase())) && (state.category === "Toutes les catégories" || x.category === state.category) && (state.type === "Tous" || x.type === state.type));
-  if (state.sort === "Prix croissant") results.sort((a,b) => a.price-b.price);
-  if (state.sort === "Prix décroissant") results.sort((a,b) => b.price-a.price);
+  // The server already applies the search, filters and sort; until a search
+  // has run, show every approved listing.
+  const results = state.searchResults || listings;
   shell(`<div class="layout"><aside class="panel filters"><h3>Filtres</h3><form id="filter-form">
     <div class="field"><label for="category">Catégorie</label><select id="category" name="category"><option>Toutes les catégories</option>${categories.map(c=>`<option ${state.category===c?"selected":""}>${escapeHTML(c)}</option>`).join("")}</select>${state.categoryStatus === "error" ? `<small class="meta">Impossible de charger les catégories depuis le serveur.</small>` : ""}</div>
     <div class="field"><label for="type">Type d’annonce</label><select id="type" name="type"><option>Tous</option><option ${state.type==="À vendre"?"selected":""}>À vendre</option><option ${state.type==="Je recherche"?"selected":""}>Je recherche</option></select></div>
@@ -152,15 +153,17 @@ async function loadListingDetail(id) {
   }
 }
 function publishPage() {
+  if (!state.currentUser && state.apiStatus !== "loading") return shell(`${pageTitle("Créer une nouvelle annonce")}${loginPrompt("Connectez-vous pour publier une annonce.")}`);
   shell(`<div style="max-width:820px;margin:auto">${pageTitle("Créer une nouvelle annonce", "Choisissez le type d’annonce et complétez les informations.")}
   <div class="two-col section"><button class="panel type-choice" data-type="À vendre" style="text-align:left"><span class="eyebrow">À vendre</span><h2>Je souhaite vendre</h2><p>Je souhaite vendre un article, un bien ou un service.</p><span class="btn btn-outline">Choisir</span></button><button class="panel type-choice" data-type="Je recherche" style="text-align:left"><span class="eyebrow">Je recherche</span><h2>Je recherche</h2><p>Je recherche un article, un bien ou un service.</p><span class="btn btn-outline">Choisir</span></button></div>
   <form id="publish-form" class="panel section"><h2>Informations de l’annonce</h2><div class="field"><label for="ad-title">Titre de l’annonce</label><input id="ad-title" name="title" placeholder="Ex : iPhone 13 en très bon état" required></div>
   <div class="two-col"><div class="field"><label>Catégorie</label><select name="category" required ${state.categoryStatus !== "ready" ? "disabled" : ""}><option value="">${state.categoryStatus === "loading" ? "Chargement des catégories..." : state.categoryStatus === "error" ? "Catégories indisponibles" : "Sélectionner une catégorie"}</option>${categories.map(c=>`<option>${escapeHTML(c)}</option>`).join("")}</select>${state.categoryStatus === "error" ? `<small class="meta">Vérifiez la connexion à Aiven et rechargez la page.</small>` : ""}</div><div class="field"><label>Prix en MAD</label><input name="price" type="number" min="0" placeholder="Prix en MAD" required></div></div>
   <div class="two-col"><div class="field"><label>Localisation</label><select name="city"><option>Tanger</option><option>Tétouan</option><option>Rabat</option><option>Casablanca</option><option>Fès</option><option>Marrakech</option></select></div><div class="field"><label>État</label><select name="condition"><option>Neuf</option><option>Très bon état</option><option>Bon état</option><option>État correct</option></select></div></div>
-  <div class="field"><label>Description</label><textarea name="description" placeholder="Décrivez votre annonce..." required></textarea></div><div class="field"><label>Photo (maquette front-end)</label><input name="photo" type="file" accept="image/*"></div>
-  <div class="actions"><button class="btn btn-primary">Publier l’annonce</button><a class="btn btn-outline" href="#/my-ads">Annuler</a></div><p class="small">Démo front-end : les annonces créées sont conservées uniquement dans la session en cours.</p></form></div>`);
+  <div class="field"><label>Description</label><textarea name="description" placeholder="Décrivez votre annonce..." required></textarea></div><div class="field"><label>Photos (JPG, PNG ou WebP, 8 Mo max, 5 photos max)</label><input name="images[]" type="file" accept="image/jpeg,image/png,image/webp" multiple></div>
+  <div class="actions"><button class="btn btn-primary">Publier l’annonce</button><a class="btn btn-outline" href="#/my-ads">Annuler</a></div><p class="small">Votre annonce sera visible après validation par un administrateur.</p></form></div>`);
 }
 function myAdsPage() {
+  if (!state.currentUser && state.apiStatus !== "loading") return shell(`${pageTitle("Mes annonces")}${loginPrompt("Connectez-vous pour gérer vos annonces.")}`, "my-ads");
   shell(`<div id="my-listings">${pageTitle("Mes annonces", "Vos annonces enregistrées dans la base de données.")}<div class="empty">Chargement…</div></div>`, "my-ads");
 }
 function favoritesPage() {
@@ -175,6 +178,7 @@ function favoritesPage() {
   shell(`${pageTitle("Mes favoris", "Retrouvez ici les annonces que vous avez enregistrées.")}${content}`);
 }
 function messagesPage() {
+  if (!state.currentUser && state.apiStatus !== "loading") return shell(`${pageTitle("Messages")}${loginPrompt("Connectez-vous pour consulter vos messages.")}`);
   shell(`<div class="page-title"><h1>Messages</h1><p>Échangez directement avec les vendeurs et les acheteurs.</p></div>
   <div class="panel chat-layout"><aside class="chat-list" id="conversation-list"><p>Chargement…</p></aside>
   <section class="chat-window"><div class="chat-head" id="conversation-title">Choisissez une conversation</div><div class="messages" id="messages"><p class="empty">Vos messages apparaîtront ici.</p></div>
@@ -194,7 +198,7 @@ function forgotPage() {
   shell(`<div class="auth-wrap"><aside class="auth-side"><span class="logo"><span class="logo-mark">Q</span>QuickAnnonces</span><h1>Récupérez votre compte</h1><p>Nous vous aiderons à retrouver l’accès à votre espace.</p></aside><section class="auth-form"><h2>Mot de passe oublié ?</h2><p>Entrez votre adresse e-mail pour recevoir un lien de réinitialisation.</p><form id="forgot-form"><div class="field"><label>Adresse e-mail</label><input name="email" type="email" placeholder="exemple@email.com" required></div><button class="btn btn-primary btn-block">Envoyer le lien de réinitialisation</button></form><p class="center"><a class="text-link" href="#/login">← Retour à la connexion</a></p></section></div>`);
 }
 function resetPage() {
-  shell(`<div class="auth-wrap"><aside class="auth-side"><span class="logo"><span class="logo-mark">Q</span>QuickAnnonces</span><h1>Un nouveau départ</h1><p>Choisissez un nouveau mot de passe sécurisé.</p></aside><section class="auth-form"><h2>Créer un nouveau mot de passe</h2><form id="reset-form"><div class="field"><label>Nouveau mot de passe</label><input name="password" type="password" required minlength="10"></div><div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" required minlength="10"></div><button class="btn btn-primary btn-block">Réinitialiser le mot de passe</button></form></section></div>`);
+  shell(`<div class="auth-wrap"><aside class="auth-side"><span class="logo"><span class="logo-mark">Q</span>QuickAnnonces</span><h1>Un nouveau départ</h1><p>Choisissez un nouveau mot de passe sécurisé.</p></aside><section class="auth-form"><h2>Créer un nouveau mot de passe</h2><form id="reset-form"><input type="hidden" name="token" value="${escapeHTML(currentRoute().id)}"><div class="field"><label>Nouveau mot de passe</label><input name="password" type="password" required minlength="10"></div><div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" required minlength="10"></div><button class="btn btn-primary btn-block">Réinitialiser le mot de passe</button></form></section></div>`);
 }
 function quickmatchPage() {
   shell(`${pageTitle("QuickMatch ✨", "Les recommandations personnalisées ne sont pas encore connectées aux données de votre compte.")}<div class="panel"><p>Utilisez la recherche d’annonces pour consulter les résultats enregistrés dans la base de données.</p><a class="btn btn-primary" href="#/search">Rechercher des annonces</a></div>`);
@@ -203,6 +207,7 @@ function findForMePage() {
   shell(`${pageTitle("Trouver pour moi ✨", "Cette fonction de recommandation n’est pas encore connectée à la base de données.")}<div class="panel"><p>Vous pouvez rechercher les annonces actuellement enregistrées.</p><a class="btn btn-primary" href="#/search">Voir les annonces</a></div>`);
 }
 function alertsPage() {
+  if (!state.currentUser && state.apiStatus !== "loading") return shell(`${pageTitle("Mes alertes")}${loginPrompt("Connectez-vous pour gérer vos alertes.")}`);
   shell(`${pageTitle("Mes alertes", "Les alertes ci-dessous sont chargées depuis votre compte.")}<div class="two-col"><section class="panel"><h2>Alertes enregistrées</h2><div id="saved-alerts" class="empty">Chargement…</div></section><section class="panel"><h2>Créer une alerte</h2><form id="alert-form"><div class="field"><label for="alert-query">Recherche</label><input id="alert-query" name="query" required></div><div class="field"><label for="alert-budget">Budget maximum (DH)</label><input id="alert-budget" name="budget" type="number" min="0"></div><div class="field"><label for="alert-city">Ville</label><input id="alert-city" name="city"></div><button class="btn btn-primary">Enregistrer l’alerte</button></form></section></div>`);
 }
 function comparePage() {
@@ -212,6 +217,7 @@ function securityPage() {
   shell(`${pageTitle("Sécurité & confiance 🛡️", "Les vérifications de profil et les avis ne sont pas encore connectés à la base de données.")}<div class="panel"><p>QuickAnnonces ne confirme actuellement ni l’identité ni le téléphone des membres.</p></div>`);
 }
 function dashboardPage() {
+  if (!state.currentUser && state.apiStatus !== "loading") return shell(`${pageTitle("Mon compte")}${loginPrompt("Connectez-vous pour accéder à votre compte.")}`);
   const greeting = state.currentUser ? `Bonjour ${escapeHTML(state.currentUser.full_name)} 👋` : "Mon compte";
   shell(`${pageTitle(greeting, "Consultez les données enregistrées sur votre compte.")}<div class="panel"><p>Les statistiques du tableau de bord ne sont pas encore calculées à partir de la base de données.</p><div class="actions"><a class="btn btn-primary" href="#/my-ads">Mes annonces</a><a class="btn btn-outline" href="#/favorites">Mes favoris</a><a class="btn btn-outline" href="#/messages">Messages</a><a class="btn btn-outline" href="#/alerts">Alertes</a></div></div>`);
 }
@@ -318,6 +324,9 @@ async function apiRequest(path, options = {}) {
   if (!response.ok) throw new Error(data.error || "La requête a échoué.");
   return data;
 }
+// Background data loads redraw the page, but not on sign-in forms, where a
+// redraw would wipe what the user is typing.
+function rerender() { if (!["login", "register", "forgot", "reset"].includes(currentRoute().page)) render(); }
 function liveListing(row) {
   const created = new Date(String(row.created_at || "").replace(" ", "T") + (String(row.created_at || "").endsWith("Z") ? "" : "Z"));
   const minutes = Math.max(0, Math.floor((Date.now() - created.getTime()) / 60000));
@@ -337,12 +346,12 @@ async function refreshListings() {
     state.apiStatus = "ready";
     const favs = state.currentUser ? await apiRequest("favorites") : { listings: [] };
     state.favorites = new Set((favs.listings || []).map(x => Number(x.id)));
-    render();
+    rerender();
   } catch (error) {
     state.backendReady = false;
     state.apiStatus = "error";
     listings.splice(0, listings.length);
-    render();
+    rerender();
     console.error("Could not load listings from the API:", error);
     toast(`Annonces indisponibles : ${error.message}`);
   }
@@ -356,7 +365,7 @@ async function refreshCategories() {
   categorySlugs.clear();
   rows.forEach(row => categorySlugs.set(String(row.name), String(row.slug)));
   state.categoryStatus = "ready";
-  render();
+  rerender();
 }
 function showApiError(error) { toast(error.message || "Une erreur est survenue."); }
 document.addEventListener("click", async event => {
@@ -374,6 +383,11 @@ document.addEventListener("click", async event => {
     openProfile.classList.remove("open");
     openProfile.querySelector("[data-profile-toggle]")?.setAttribute("aria-expanded", "false");
     openProfile.querySelector(".profile-dropdown").hidden = true;
+  }
+  if (event.target.closest?.("#reset-filters")) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    Object.assign(state, { query: "", category: "Toutes les catégories", type: "Tous", sort: "Plus récent", searchResults: null });
+    render(); return;
   }
   const conversation = event.target.closest?.("[data-conversation]");
   if (conversation) {
@@ -414,9 +428,8 @@ document.addEventListener("click", async event => {
   }
   if (event.target.closest?.("#contact-seller")) {
     event.preventDefault(); event.stopImmediatePropagation();
-    const item = getListing(currentRoute().id);
     if (!state.currentUser) return go("login");
-    try { const result = await apiRequest("conversations", { method: "POST", body: JSON.stringify({ annonce_id: item.id }) }); state.conversationId = result.conversation_id; go("messages"); }
+    try { const result = await apiRequest("conversations", { method: "POST", body: JSON.stringify({ annonce_id: Number(currentRoute().id) }) }); state.conversationId = result.conversation_id; go("messages"); }
     catch (error) { showApiError(error); }
   }
   const moderation = event.target.closest?.("[data-moderate]");
@@ -424,12 +437,12 @@ document.addEventListener("click", async event => {
     event.preventDefault(); event.stopImmediatePropagation();
     const row = moderation.closest(".match-row"); const adId = Number(row?.dataset?.id);
     if (!adId) return toast("Actualisez la liste de modération.");
-    try { await apiRequest(`admin/listings/${adId}`, { method: "PATCH", body: JSON.stringify({ status: moderation.dataset.moderate === "validé" ? "approved" : "rejected" }) }); await loadAdmin(); }
+    try { await apiRequest(`admin/listings/${adId}`, { method: "PATCH", body: JSON.stringify({ status: moderation.dataset.moderate === "validé" ? "approved" : "rejected" }) }); toast(moderation.dataset.moderate === "validé" ? "Annonce validée." : "Annonce refusée."); await refreshListings(); await loadAdmin(); }
     catch (error) { showApiError(error); }
   }
 }, true);
 async function loadAdmin() {
-  const status = state.adminFilter === "En attente" ? "pending" : state.adminFilter === "Validées" ? "approved" : state.adminFilter === "Refusées" ? "rejected" : "all";
+  const status = ["pending", "approved", "rejected", "all"].includes(state.adminFilter) ? state.adminFilter : "pending";
   try {
     const { listings: rows } = await apiRequest(`admin/listings?status=${status}`);
     const host = $("#moderation-list"); if (!host) return;
@@ -490,7 +503,7 @@ document.addEventListener("submit", async event => {
         if (fd.has("confirm") && fd.get("password") !== fd.get("confirm")) throw new Error("Les mots de passe ne correspondent pas.");
         const register = fd.has("name");
         result = await apiRequest(`auth/${register ? "register" : "login"}`, { method: "POST", body: JSON.stringify(register ? { name: fd.get("name"), email: fd.get("email"), password: fd.get("password") } : { email: fd.get("email"), password: fd.get("password") }) });
-        state.currentUser = result.user; state.csrf = result.csrf; toast("Connexion réussie."); location.assign("/account.html"); return;
+        state.currentUser = result.user; state.csrf = result.csrf; toast(register ? "Compte créé." : "Connexion réussie."); location.assign("./account.html"); return;
       }
       if (id === "publish-form") {
         const payload = new FormData(form);
@@ -504,9 +517,18 @@ document.addEventListener("submit", async event => {
         if (!conv) throw new Error("Choisissez une conversation pour envoyer un message.");
         await apiRequest(`conversations/${conv}/messages`, { method: "POST", body: JSON.stringify({ message: fd.get("message") }) }); toast("Message envoyé."); form.reset(); await loadConversation(conv); return;
       }
-      if (id === "alert-form") { await apiRequest("alerts", { method: "POST", body: JSON.stringify({ query: fd.get("query"), city: fd.get("city"), max_price: fd.get("budget") || null }) }); toast("Alerte créée."); return; }
-      if (id === "forgot-form") { await apiRequest("auth/forgot", { method: "POST", body: JSON.stringify({ email: fd.get("email") }) }); }
-      if (id === "reset-form") throw new Error("La réinitialisation par e-mail n’est pas encore configurée.");
+      if (id === "alert-form") { await apiRequest("alerts", { method: "POST", body: JSON.stringify({ query: fd.get("query"), city: fd.get("city"), max_price: fd.get("budget") || null }) }); toast("Alerte créée."); form.reset(); await loadAlerts(); return; }
+      if (id === "forgot-form") {
+        await apiRequest("auth/forgot", { method: "POST", body: JSON.stringify({ email: fd.get("email") }) });
+        form.innerHTML = `<div class="notice">Si un compte existe pour cette adresse, un e-mail contenant un lien de réinitialisation vient d’être envoyé. Le lien est valable 1 heure.</div>`;
+        return;
+      }
+      if (id === "reset-form") {
+        if (fd.get("password") !== fd.get("confirm")) throw new Error("Les mots de passe ne correspondent pas.");
+        if (!fd.get("token")) throw new Error("Ce lien de réinitialisation est invalide. Demandez un nouveau lien.");
+        await apiRequest("auth/reset", { method: "POST", body: JSON.stringify({ token: fd.get("token"), password: fd.get("password") }) });
+        toast("Mot de passe modifié. Vous pouvez vous connecter."); go("login"); return;
+      }
     }
     if (id === "filter-form") { state.category = fd.get("category"); state.type = fd.get("type"); state.sort = fd.get("sort"); await loadSearch(); return; }
     if (["results-search", "hero-search", "nav-search"].includes(id)) { state.query = String(fd.get("q") || "").trim(); go("search"); await loadSearch(); }
@@ -514,26 +536,17 @@ document.addEventListener("submit", async event => {
 }, true);
 async function loadSearch() {
   const query = new URLSearchParams({ q: state.query || "", category: categorySlugs.get(state.category) || "", type: state.type === "À vendre" ? "sale" : state.type === "Je recherche" ? "wanted" : "", sort: state.sort === "Prix croissant" ? "price_asc" : state.sort === "Prix décroissant" ? "price_desc" : "" });
-  try { const result = await apiRequest(`listings?${query}`); listings.splice(0, listings.length, ...result.listings.map(liveListing)); render(); }
+  try { const result = await apiRequest(`listings?${query}`); state.searchResults = result.listings.map(liveListing); render(); }
   catch (error) { showApiError(error); }
 }
-const originalDetailPage = detailPage;
-detailPage = function(id) {
-  originalDetailPage(id);
-  const item = getListing(id);
-  const image = item.images?.[0]?.image_url;
-  const visual = $(".product-visual");
-  if (visual && image) visual.innerHTML = `<img src="${escapeHTML(image)}" alt="${escapeHTML(item.title)}" style="max-width:100%;max-height:100%;object-fit:contain">`;
-  if (state.currentUser) apiRequest(`listings/${Number(id)}/comments`).then(({ comments }) => {
-    if (currentRoute().page !== "detail" || currentRoute().id !== String(id)) return;
-    const form = $("#comment-form");
-    if (form) {
-      const heading = form.parentElement.querySelector("h2");
-      if (heading) heading.textContent = `Commentaires (${comments.length})`;
-      form.insertAdjacentHTML("beforebegin", comments.map(comment => `<div class="comment"><strong>${escapeHTML(comment.user)}</strong><p style="margin:0">${escapeHTML(comment.comment_text)}</p></div>`).join(""));
-    }
-  }).catch(showApiError);
-};
+async function loadAlerts() {
+  const host = $("#saved-alerts"); if (!host || !state.currentUser) return;
+  try {
+    const { alerts } = await apiRequest("alerts");
+    host.className = "";
+    host.innerHTML = alerts.map(alert => `<div class="match-row"><div><strong>${escapeHTML(alert.search_query)}</strong><div class="meta">${alert.city ? "📍 " + escapeHTML(alert.city) : "Toutes les villes"}${alert.max_price ? " · max " + money(Number(alert.max_price)) : ""}</div></div></div>`).join("") || `<div class="empty">Aucune alerte enregistrée.</div>`;
+  } catch (error) { showApiError(error); }
+}
 async function startBackend() {
   if (location.protocol === "file:") {
     state.apiStatus = "error";
@@ -560,11 +573,13 @@ async function startBackend() {
   await refreshListings();
   if (currentRoute().page === "admin" && state.currentUser?.role === "admin") await loadAdmin();
   if (currentRoute().page === "my-ads" && state.currentUser) await loadMyAds();
+  if (currentRoute().page === "alerts" && state.currentUser) await loadAlerts();
 }
 startBackend();
 window.addEventListener("hashchange", () => {
   setTimeout(() => {
     if (currentRoute().page === "my-ads" && state.currentUser) loadMyAds();
     if (currentRoute().page === "admin" && state.currentUser?.role === "admin") loadAdmin();
+    if (currentRoute().page === "alerts" && state.currentUser) loadAlerts();
   }, 0);
 });
