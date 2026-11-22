@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    { "source": "/api/maintenance/expiration", "destination": "/api/maintenance/expiration.php" },
     { "source": "/api/health", "destination": "/api/health.php" },
     { "source": "/api/auth/register", "destination": "/api/auth/register.php" },
     { "source": "/api/auth/login", "destination": "/api/auth/login.php" },
@@ -20,5 +21,12 @@
     { "source": "/api/alerts", "destination": "/api/users/alerts.php" },
     { "source": "/api/admin/listings/:id", "destination": "/api/admin/annonces.php" },
     { "source": "/api/admin/listings", "destination": "/api/admin/annonces.php" }
-  ]
+  ],
+  "schedules": {
+    "expire-announcements-daily": {
+      "path": "/api/maintenance/expiration",
+      "schedule": "0 2 * * *",
+      "requestMethod": "GET"
+    }
+  }
 }

@@ -29,7 +29,7 @@ function rowImages(PDO $pdo, int $id): array
 
 function listing(PDO $pdo, int $id): ?array
 {
-    $q = $pdo->prepare('SELECT a.id, a.user_id, a.category_id, a.annonce_type, a.title, a.description, a.price, a.currency, a.city, a.item_condition, a.status, a.created_at, c.name AS category, u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE a.id=?');
+    $q = $pdo->prepare("SELECT a.id, a.user_id, a.category_id, a.annonce_type, a.title, a.description, a.price, a.currency, a.city, a.item_condition, CASE WHEN a.status='approved' AND a.date_expiration < CURDATE() THEN 'expired' ELSE a.status END AS status, a.created_at, a.date_publication, a.date_expiration, c.name AS category, u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE a.id=?");
     $q->execute([$id]);
     $row = $q->fetch();
     if ($row) $row['images'] = rowImages($pdo, (int)$row['id']);
@@ -84,14 +84,8 @@ function sendMail(string $to, string $subject, string $text): void
     if ($body === false || $status < 200 || $status >= 300) throw new RuntimeException('Email delivery failed with status ' . $status . '.');
 }
 
-// When the expiration migration has been applied, an approved listing is
-// published today and expires 30 days later. Without the migration the
-// columns do not exist and this is skipped.
+// Fill dates only for legacy listings that do not already have them.
 function setPublicationDates(PDO $pdo, int $id): void
 {
-    try {
-        $pdo->prepare('UPDATE annonce SET date_publication=CURDATE(), date_expiration=DATE_ADD(CURDATE(), INTERVAL 30 DAY) WHERE id=?')->execute([$id]);
-    } catch (PDOException $e) {
-        if ($e->getCode() !== '42S22') throw $e;
-    }
+    $pdo->prepare('UPDATE annonce SET date_expiration=COALESCE(date_expiration,calculer_date_expiration(COALESCE(date_publication,CURDATE()))), date_publication=COALESCE(date_publication,CURDATE()) WHERE id=?')->execute([$id]);
 }

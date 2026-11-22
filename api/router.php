@@ -21,9 +21,24 @@ if ($resource === 'admin') {
 }
 if ($method === 'OPTIONS') { header('Allow: GET, POST, PATCH, DELETE, OPTIONS'); exit; }
 
+if ($resource === 'maintenance' && $sub === 'expiration') {
+    if ($method !== 'GET') respond(['error' => 'Method not allowed.'], 405);
+    $secret = envValue('CRON_SECRET');
+    if (!$secret) respond(['error' => 'Scheduled maintenance is not configured.'], 503);
+    if (!hash_equals('Bearer ' . $secret, trim($_SERVER['HTTP_AUTHORIZATION'] ?? ''))) {
+        respond(['error' => 'Unauthorized.'], 401);
+    }
+}
+
 try {
     $pdo = db();
     if ($resource === 'health' && $method === 'GET') { $pdo->query('SELECT 1'); respond(['ok' => true]); }
+    if ($resource === 'maintenance' && $sub === 'expiration' && $method === 'GET') {
+        $stmt = $pdo->query('CALL desactiver_annonces_expirees(@p_nb)');
+        $stmt->closeCursor();
+        $updated = (int)$pdo->query('SELECT @p_nb')->fetchColumn();
+        respond(['ok' => true, 'updated' => $updated]);
+    }
     if ($resource === 'categories' && $method === 'GET') respond(['categories' => $pdo->query('SELECT id, name, slug FROM categories ORDER BY id')->fetchAll()]);
 
     if ($resource === 'auth' && $sub === 'register' && $method === 'POST') {
@@ -81,14 +96,14 @@ try {
     }
 
     if ($resource === 'listings' && $method === 'GET' && !$id) {
-        $where = ["a.status='approved'"]; $params = [];
+        $where = ["a.status='approved'", '(a.date_expiration IS NULL OR a.date_expiration >= CURDATE())']; $params = [];
         $qText = trim((string)($_GET['q'] ?? '')); $category = trim((string)($_GET['category'] ?? '')); $city = trim((string)($_GET['city'] ?? '')); $type = trim((string)($_GET['type'] ?? ''));
         if ($qText !== '') { $where[] = '(a.title LIKE ? OR a.description LIKE ?)'; $params[] = '%'.$qText.'%'; $params[] = '%'.$qText.'%'; }
         if ($category !== '') { $where[] = 'c.slug=?'; $params[] = $category; }
         if ($city !== '') { $where[] = 'a.city=?'; $params[] = $city; }
         if ($type === 'sale' || $type === 'wanted') { $where[] = 'a.annonce_type=?'; $params[] = $type; }
         $sort = ($_GET['sort'] ?? '') === 'price_asc' ? 'a.price ASC' : (($_GET['sort'] ?? '') === 'price_desc' ? 'a.price DESC' : 'a.created_at DESC');
-        $sql = 'SELECT a.id,a.user_id,a.category_id,a.annonce_type,a.title,a.description,a.price,a.currency,a.city,a.item_condition,a.status,a.created_at,c.name AS category,c.slug AS category_slug,u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE '.implode(' AND ',$where).' ORDER BY '.$sort.' LIMIT 100';
+        $sql = "SELECT a.id,a.user_id,a.category_id,a.annonce_type,a.title,a.description,a.price,a.currency,a.city,a.item_condition,CASE WHEN a.status='approved' AND a.date_expiration < CURDATE() THEN 'expired' ELSE a.status END AS status,a.created_at,a.date_publication,a.date_expiration,c.name AS category,c.slug AS category_slug,u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE ".implode(' AND ',$where).' ORDER BY '.$sort.' LIMIT 100';
         $stmt=$pdo->prepare($sql); $stmt->execute($params); $items=$stmt->fetchAll();
         foreach ($items as &$item) $item['images']=rowImages($pdo,(int)$item['id']); unset($item);
         respond(['listings'=>$items]);
@@ -103,7 +118,7 @@ try {
         if ($title===''||mb_strlen($title)>180||$description===''||$city===''||$price===false||$price<0||$category==='') respond(['error'=>'Complete all required listing fields with a valid price.'],422);
         $q=$pdo->prepare('SELECT id FROM categories WHERE name=? OR slug=?'); $q->execute([$category,$category]); $categoryId=$q->fetchColumn(); if (!$categoryId) respond(['error'=>'Choose a valid category.'],422);
         $pdo->beginTransaction();
-        $q=$pdo->prepare('INSERT INTO annonce (user_id,category_id,annonce_type,title,description,price,city,item_condition) VALUES (?,?,?,?,?,?,?,?)');
+        $q=$pdo->prepare('INSERT INTO annonce (user_id,category_id,annonce_type,title,description,price,city,item_condition,date_publication,date_expiration) VALUES (?,?,?,?,?,?,?,?,CURDATE(),calculer_date_expiration(CURDATE()))');
         $q->execute([$current['id'],$categoryId,$type,$title,$description,$price,$city,trim((string)($data['condition'] ?? '')) ?: null]); $newId=(int)$pdo->lastInsertId();
         $files=$_FILES['images'] ?? $_FILES['photo'] ?? null;
         if ($files) {
@@ -131,7 +146,7 @@ try {
         $current=requireUser(); $stmt=$pdo->prepare('SELECT annonce_id FROM favorites WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]); $items=[];
         foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) { $item=listing($pdo,(int)$adId); if($item) $items[]=$item; } respond(['listings'=>$items]);
     }
-    if ($resource === 'favorites' && $id && $method === 'POST') { $current=requireUser(); requireCsrf(); $stmt=$pdo->prepare('INSERT IGNORE INTO favorites (user_id,annonce_id) SELECT ?,id FROM annonce WHERE id=? AND status=\'approved\''); $stmt->execute([$current['id'],$id]); respond(['ok'=>true],201); }
+    if ($resource === 'favorites' && $id && $method === 'POST') { $current=requireUser(); requireCsrf(); $stmt=$pdo->prepare('INSERT IGNORE INTO favorites (user_id,annonce_id) SELECT ?,id FROM annonce WHERE id=? AND status=\'approved\' AND (date_expiration IS NULL OR date_expiration>=CURDATE())'); $stmt->execute([$current['id'],$id]); respond(['ok'=>true],201); }
     if ($resource === 'favorites' && $id && $method === 'DELETE') { $current=requireUser(); requireCsrf(); $stmt=$pdo->prepare('DELETE FROM favorites WHERE user_id=? AND annonce_id=?'); $stmt->execute([$current['id'],$id]); respond(['ok'=>true]); }
 
     if ($resource === 'listings' && $id && $sub === 'comments' && $method === 'GET') { $stmt=$pdo->prepare('SELECT c.id,c.user_id,c.parent_comment_id,c.comment_text,c.created_at,u.full_name AS user FROM annonce_comments c JOIN users u ON u.id=c.user_id WHERE c.annonce_id=? ORDER BY c.created_at'); $stmt->execute([$id]); respond(['comments'=>$stmt->fetchAll()]); }
@@ -145,8 +160,18 @@ try {
     if ($resource === 'alerts' && $method === 'GET') { $current=requireUser(); $stmt=$pdo->prepare('SELECT id,search_query,city,max_price,category_id,is_active,created_at FROM search_alerts WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]); respond(['alerts'=>$stmt->fetchAll()]); }
     if ($resource === 'alerts' && $method === 'POST') { $current=requireUser(); requireCsrf(); $data=input(); $query=trim((string)($data['query']??'')); if($query===''||mb_strlen($query)>255) respond(['error'=>'Enter a search up to 255 characters.'],422); $stmt=$pdo->prepare('INSERT INTO search_alerts (user_id,search_query,city,max_price,category_id) VALUES (?,?,?,?,?)'); $stmt->execute([$current['id'],$query,trim((string)($data['city']??''))?:null,$data['max_price']??null,$data['category_id']??null]); respond(['id'=>(int)$pdo->lastInsertId()],201); }
 
-    if ($resource === 'admin' && $sub === 'listings' && $method === 'GET') { $current=requireUser(); requireAdmin($current); $status=$_GET['status']??'pending'; if($status==='all') { $stmt=$pdo->query('SELECT id FROM annonce ORDER BY created_at DESC LIMIT 100'); } else { if(!in_array($status,['pending','approved','rejected','sold','archived','expired'],true)) respond(['error'=>'Invalid status filter.'],422); $stmt=$pdo->prepare('SELECT id FROM annonce WHERE status=? ORDER BY created_at DESC LIMIT 100'); $stmt->execute([$status]); } $items=[]; foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) $items[]=listing($pdo,(int)$adId); respond(['listings'=>$items]); }
-    if ($resource === 'admin' && $sub === 'listings' && $id && $method === 'PATCH') { $current=requireUser(); requireAdmin($current); requireCsrf(); $data=input(); $status=$data['status']??''; if(!in_array($status,['approved','rejected'],true)) respond(['error'=>'Status must be approved or rejected.'],422); if(!listing($pdo,$id)) respond(['error'=>'Listing not found.'],404); $stmt=$pdo->prepare('UPDATE annonce SET status=?,moderation_note=?,moderated_by=?,moderated_at=NOW() WHERE id=?'); $stmt->execute([$status,trim((string)($data['moderation_note']??''))?:null,$current['id'],$id]); if($status==='approved') setPublicationDates($pdo,$id); respond(['listing'=>listing($pdo,$id)]); }
+    if ($resource === 'admin' && $sub === 'listings' && $method === 'GET') { $current=requireUser(); requireAdmin($current); $status=$_GET['status']??'pending'; if($status==='all') { $stmt=$pdo->query('SELECT id FROM annonce ORDER BY created_at DESC LIMIT 100'); } else { if(!in_array($status,['pending','approved','rejected','sold','archived','expired'],true)) respond(['error'=>'Invalid status filter.'],422); if($status==='expired') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='expired' OR (status='approved' AND date_expiration<CURDATE()) ORDER BY created_at DESC LIMIT 100"); } elseif($status==='approved') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='approved' AND (date_expiration IS NULL OR date_expiration>=CURDATE()) ORDER BY created_at DESC LIMIT 100"); } else { $stmt=$pdo->prepare('SELECT id FROM annonce WHERE status=? ORDER BY created_at DESC LIMIT 100'); $stmt->execute([$status]); } } $items=[]; foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) $items[]=listing($pdo,(int)$adId); respond(['listings'=>$items]); }
+    if ($resource === 'admin' && $sub === 'listings' && $id && $method === 'PATCH') {
+        $current=requireUser(); requireAdmin($current); requireCsrf(); $data=input(); $status=$data['status']??'';
+        if(!in_array($status,['approved','rejected'],true)) respond(['error'=>'Status must be approved or rejected.'],422);
+        if(!listing($pdo,$id)) respond(['error'=>'Listing not found.'],404);
+        $pdo->beginTransaction();
+        $stmt=$pdo->prepare('UPDATE annonce SET status=?,moderation_note=?,moderated_by=?,moderated_at=NOW() WHERE id=?');
+        $stmt->execute([$status,trim((string)($data['moderation_note']??''))?:null,$current['id'],$id]);
+        if($status==='approved') setPublicationDates($pdo,$id);
+        $pdo->commit();
+        respond(['listing'=>listing($pdo,$id)]);
+    }
 
     respond(['error'=>'Route not found.'],404);
 } catch (Throwable $e) {

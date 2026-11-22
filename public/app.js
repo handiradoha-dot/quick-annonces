@@ -24,6 +24,9 @@ const listings = [];
 const categories = [];
 const categorySlugs = new Map();
 const money = n => new Intl.NumberFormat("fr-MA").format(n) + " MAD";
+const statusLabels = { pending: "En attente", approved: "Validée", rejected: "Refusée", sold: "Vendue", archived: "Archivée", expired: "Expirée" };
+const statusLabel = status => statusLabels[status] || status || "—";
+const dateLabel = date => date ? new Date(`${date}T00:00:00Z`).toLocaleDateString("fr-FR", { timeZone: "UTC" }) : "";
 const getListing = id => listings.find(item => item.id === Number(id)) || null;
 const loginPrompt = text => `<div class="empty">${escapeHTML(text)}<p><a href="./login.html" class="btn btn-primary">Se connecter</a></p></div>`;
 const icon = name => ({ home: "⌂", search: "⌕", heart: "♡", user: "♙", plus: "+" }[name] || "•");
@@ -146,7 +149,7 @@ async function loadListingDetail(id) {
       <div class="panel section"><h2>Description</h2><p>${escapeHTML(item.description)}</p><div class="meta">État : ${escapeHTML(item.condition)} · Catégorie : ${escapeHTML(item.category)} · 📍 ${escapeHTML(item.city)}</div></div>
       <div class="panel section"><h2>Commentaires (${comments.length})</h2>${comments.map(comment => `<div class="comment"><strong>${escapeHTML(comment.user)}</strong><p>${escapeHTML(comment.comment_text)}</p></div>`).join("") || `<p class="empty">Aucun commentaire pour le moment.</p>`}
       ${state.currentUser ? `<form id="comment-form" class="section"><div class="field"><label for="comment">Ajouter un commentaire</label><textarea id="comment" name="comment" required></textarea></div><button class="btn btn-primary">Publier le commentaire</button></form>` : `<p><a class="text-link" href="./login.html">Connectez-vous pour commenter.</a></p>`}</div></section>
-      <aside class="panel product-info"><span class="pill">${escapeHTML(item.type)}</span><h1>${escapeHTML(item.title)}</h1><div class="price">${money(item.price)}</div><p>${escapeHTML(item.condition)} · ${escapeHTML(item.category)}</p><div class="notice">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.age)}</div><div class="actions"><button class="btn btn-primary" id="contact-seller">💬 Contacter</button><button class="btn btn-outline" data-fav="${item.id}">${state.favorites.has(item.id) ? "♥ Favoris" : "♡ Favoris"}</button></div><div class="section"><h3>Vendeur</h3><div class="profile-head"><div class="avatar">${escapeHTML(profileInitials(item.seller))}</div><strong>${escapeHTML(item.seller)}</strong></div></div></aside></div>`;
+      <aside class="panel product-info"><span class="pill">${escapeHTML(statusLabel(item.status))}</span><h1>${escapeHTML(item.title)}</h1><div class="price">${money(item.price)}</div><p>${escapeHTML(item.condition)} · ${escapeHTML(item.category)}</p><div class="notice">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.age)}</div>${item.date_publication ? `<div class="meta">Date de publication : ${escapeHTML(dateLabel(item.date_publication))}</div>` : ""}${item.date_expiration ? `<div class="meta">Date d’expiration : ${escapeHTML(dateLabel(item.date_expiration))}</div>` : ""}<div class="actions">${item.status === "approved" ? `<button class="btn btn-primary" id="contact-seller">💬 Contacter</button><button class="btn btn-outline" data-fav="${item.id}">${state.favorites.has(item.id) ? "♥ Favoris" : "♡ Favoris"}</button>` : ""}</div><div class="section"><h3>Vendeur</h3><div class="profile-head"><div class="avatar">${escapeHTML(profileInitials(item.seller))}</div><strong>${escapeHTML(item.seller)}</strong></div></div></aside></div>`;
   } catch (error) {
     const host = $("#listing-detail");
     if (host) host.innerHTML = `<div class="empty">${escapeHTML(error.message)}</div>`;
@@ -226,7 +229,7 @@ function adminPage() {
     ? `<div class="empty">Connectez-vous avec un compte administrateur.</div>`
     : state.currentUser.role !== "admin"
       ? `<div class="empty">Accès réservé aux administrateurs.</div>`
-      : `<div class="panel"><div class="section-heading"><h2>Annonces à modérer</h2><span class="pill">Données du serveur</span></div><div class="tabs">${[["pending", "En attente"], ["approved", "Validées"], ["rejected", "Refusées"], ["all", "Toutes"]].map(([value, label]) => `<button class="tab ${state.adminFilter === value ? "active" : ""}" data-admin-filter="${value}">${label}</button>`).join("")}</div><div id="moderation-list" class="empty">Chargement…</div></div>`;
+      : `<div class="panel"><div class="section-heading"><h2>Annonces à modérer</h2><span class="pill">Données du serveur</span></div><div class="tabs">${[["pending", "En attente"], ["approved", "Validées"], ["rejected", "Refusées"], ["expired", "Expirées"], ["all", "Toutes"]].map(([value, label]) => `<button class="tab ${state.adminFilter === value ? "active" : ""}" data-admin-filter="${value}">${label}</button>`).join("")}</div><div id="moderation-list" class="empty">Chargement…</div></div>`;
   shell(`${pageTitle("Administration", "Les annonces ci-dessous sont chargées depuis le serveur.")}${content}`);
 }
 function sellerPage() {
@@ -335,7 +338,8 @@ function liveListing(row) {
     city: row.city, age: Number.isFinite(minutes) ? (minutes < 60 ? `Il y a ${minutes} min` : `Il y a ${Math.floor(minutes / 60)} h`) : "Récemment",
     type: row.annonce_type === "wanted" ? "Je recherche" : "À vendre", emoji: "📦",
     condition: row.item_condition || "", description: row.description, seller: row.seller || "Membre QuickAnnonces",
-    verified: false, status: row.status, images: row.images || [], user_id: Number(row.user_id)
+    verified: false, status: row.status, date_publication: row.date_publication, date_expiration: row.date_expiration,
+    images: row.images || [], user_id: Number(row.user_id)
   };
 }
 async function refreshListings() {
@@ -442,13 +446,13 @@ document.addEventListener("click", async event => {
   }
 }, true);
 async function loadAdmin() {
-  const status = ["pending", "approved", "rejected", "all"].includes(state.adminFilter) ? state.adminFilter : "pending";
+  const status = ["pending", "approved", "rejected", "expired", "all"].includes(state.adminFilter) ? state.adminFilter : "pending";
   try {
     const { listings: rows } = await apiRequest(`admin/listings?status=${status}`);
     const host = $("#moderation-list"); if (!host) return;
     host.innerHTML = rows.map(row => {
       const item = liveListing(row);
-      return `<div class="match-row" data-id="${item.id}"><div class="mini-visual">${item.emoji}</div><div><span class="pill">${escapeHTML(item.type)}</span><strong style="display:block;margin-top:6px">${escapeHTML(item.title)}</strong><div class="price">${money(item.price)}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.seller)}</div></div><div><span class="pill">${escapeHTML(row.status)}</span><div class="actions" style="margin-top:10px"><button class="btn btn-primary" data-moderate="validé">Valider</button><button class="btn btn-danger" data-moderate="refusé">Refuser</button></div></div></div>`;
+      return `<div class="match-row" data-id="${item.id}"><div class="mini-visual">${item.emoji}</div><div><span class="pill">${escapeHTML(item.type)}</span><strong style="display:block;margin-top:6px">${escapeHTML(item.title)}</strong><div class="price">${money(item.price)}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.seller)}</div>${item.date_publication ? `<div class="meta">Publication : ${escapeHTML(dateLabel(item.date_publication))}</div>` : ""}${item.date_expiration ? `<div class="meta">Expiration : ${escapeHTML(dateLabel(item.date_expiration))}</div>` : ""}</div><div><span class="pill">${escapeHTML(statusLabel(item.status))}</span>${item.status !== "expired" ? `<div class="actions" style="margin-top:10px"><button class="btn btn-primary" data-moderate="validé">Valider</button><button class="btn btn-danger" data-moderate="refusé">Refuser</button></div>` : ""}</div></div>`;
     }).join("") || `<div class="empty">Aucune annonce à modérer.</div>`;
   } catch (error) { showApiError(error); }
 }
@@ -458,11 +462,11 @@ async function loadMyAds() {
     const { listings: rows } = await apiRequest("me/listings");
     const items = rows.map(liveListing);
     const host = $("main.container"); if (!host) return;
-    host.innerHTML = `<div class="section-heading"><div>${pageTitle("Mes annonces", "Gérez vos annonces et consultez leur statut.")}</div><a href="#/publish" class="btn btn-primary">＋ Publier une annonce</a></div><div class="panel"><h2>${escapeHTML(state.currentUser.full_name)}</h2><p>${items.length} annonce(s)</p></div><div class="tabs"><button class="tab active" data-myads="all">Toutes</button><button class="tab" data-myads="active">Actives</button><button class="tab" data-myads="pending">En attente</button><button class="tab" data-myads="done">Terminées</button></div><div id="my-ad-list">${items.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Vous n’avez pas encore publié d’annonce.</div>`}</div>`;
+    host.innerHTML = `<div class="section-heading"><div>${pageTitle("Mes annonces", "Gérez vos annonces et consultez leur statut.")}</div><a href="#/publish" class="btn btn-primary">＋ Publier une annonce</a></div><div class="panel"><h2>${escapeHTML(state.currentUser.full_name)}</h2><p>${items.length} annonce(s)</p></div><div class="tabs"><button class="tab active" data-myads="all">Toutes</button><button class="tab" data-myads="active">Actives</button><button class="tab" data-myads="pending">En attente</button><button class="tab" data-myads="done">Terminées</button></div><div id="my-ad-list">${items.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(statusLabel(x.status))}</div>${x.date_publication ? `<div class="meta">Publication : ${escapeHTML(dateLabel(x.date_publication))}</div>` : ""}${x.date_expiration ? `<div class="meta">Expiration : ${escapeHTML(dateLabel(x.date_expiration))}</div>` : ""}</div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Vous n’avez pas encore publié d’annonce.</div>`}</div>`;
     $$('[data-myads]').forEach(button => button.addEventListener("click", () => {
       const filter = button.dataset.myads;
-      const shown = items.filter(x => filter === "all" || (filter === "active" && x.status === "approved") || (filter === "pending" && x.status === "pending") || (filter === "done" && ["sold", "archived", "rejected"].includes(x.status)));
-      $("#my-ad-list").innerHTML = shown.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Aucune annonce dans cette catégorie.</div>`;
+      const shown = items.filter(x => filter === "all" || (filter === "active" && x.status === "approved") || (filter === "pending" && x.status === "pending") || (filter === "done" && ["sold", "archived", "rejected", "expired"].includes(x.status)));
+      $("#my-ad-list").innerHTML = shown.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(statusLabel(x.status))}</div>${x.date_publication ? `<div class="meta">Publication : ${escapeHTML(dateLabel(x.date_publication))}</div>` : ""}${x.date_expiration ? `<div class="meta">Expiration : ${escapeHTML(dateLabel(x.date_expiration))}</div>` : ""}</div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Aucune annonce dans cette catégorie.</div>`;
     }));
   } catch (error) { showApiError(error); }
 }

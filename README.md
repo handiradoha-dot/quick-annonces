@@ -8,7 +8,26 @@ QuickAnnonces serves one home page at `public/index.html`, with dedicated login,
 2. Set the environment variables listed below in Vercel for Preview and Production, then redeploy.
 3. The app expects users to register; there is no seeded administrator. Promote the intended admin account directly in MySQL by setting its `users.role` to `admin` after registration.
 
-For the existing Aiven setup, run `quickannonces_expiration_functions.sql` once against `defaultdb` to add announcement publication/expiration dates and the expiration function/procedure. Back up the database before applying schema changes.
+The existing Aiven expiration migration is `quickannonces_expiration_functions.sql` and targets `defaultdb`. Back up the database and verify what is already installed before applying any part of it; the checks below avoid rerunning non-idempotent schema changes.
+
+The expiration feature requires the migration's `date_publication` and `date_expiration` columns, an `expired` value in the `annonce.status` enum, and the `calculer_date_expiration` function and `desactiver_annonces_expirees` procedure. Do not rerun the full migration blindly: it adds columns and drops/recreates routines. Check the target database first:
+
+```sql
+USE defaultdb;
+SHOW COLUMNS FROM annonce LIKE 'date_publication';
+SHOW COLUMNS FROM annonce LIKE 'date_expiration';
+SHOW COLUMNS FROM annonce LIKE 'status';
+SELECT ROUTINE_NAME, ROUTINE_TYPE
+FROM information_schema.ROUTINES
+WHERE ROUTINE_SCHEMA = DATABASE()
+  AND ROUTINE_NAME IN ('calculer_date_expiration', 'desactiver_annonces_expirees');
+```
+
+If anything is missing, take a backup and apply only the missing schema/routine changes from `quickannonces_expiration_functions.sql`; do not rerun its `ALTER TABLE` or `DROP ...` statements without confirming they are safe for the current database.
+
+Vercel runs the expiration procedure daily at 02:00 UTC through `/api/maintenance/expiration`. Set a long random `CRON_SECRET` in Vercel's Production environment (and Preview if scheduled previews are enabled), then redeploy. The endpoint requires `Authorization: Bearer <CRON_SECRET>` and reports the number of rows changed. Local setup uses the same variable in `.env`; invoke the endpoint manually with that bearer token to test it. If deploying outside Vercel, configure an equivalent daily scheduler to call the protected endpoint.
+
+An announcement is created as `pending` with its publication date set to `CURDATE()` and its expiration date calculated by the MySQL function. It remains hidden until moderation. Approval does not reset those dates. The public listing API also excludes dates already past in MySQL, so an announcement does not remain publicly active while waiting for the scheduled procedure.
 
 ## Vercel environment variables
 
@@ -23,6 +42,7 @@ For the existing Aiven setup, run `quickannonces_expiration_functions.sql` once 
 | `CLOUDINARY_API_KEY` | The API key shown in Cloudinary |
 | `CLOUDINARY_API_SECRET` | Your current Cloudinary API secret; keep it private |
 | `AUTH_SECRET` | A random secret with at least 32 characters |
+| `CRON_SECRET` | A long random secret used to authorize the scheduled expiration endpoint |
 | `APP_URL` | The public site address used in reset emails, e.g. `https://your-app.vercel.app` (optional on Vercel: `VERCEL_PROJECT_PRODUCTION_URL` is used when it is unset) |
 | `RESEND_API_KEY` | API key from [Resend](https://resend.com), used to send password reset emails |
 | `MAIL_FROM` | Sender, e.g. `QuickAnnonces <no-reply@your-domain.com>`; the domain must be verified in Resend |
