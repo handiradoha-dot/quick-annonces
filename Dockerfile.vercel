@@ -1,7 +1,8 @@
 FROM dunglas/frankenphp:1-php8.4-alpine AS base
 WORKDIR /app
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && install-php-extensions pdo_mysql mbstring curl
+    && install-php-extensions pdo_mysql mbstring curl fileinfo \
+    && printf '%s\n' 'upload_max_filesize=9M' 'post_max_size=45M' 'max_file_uploads=10' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
 FROM base AS dependencies
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

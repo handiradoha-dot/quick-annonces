@@ -117,15 +117,20 @@ try {
         $title=trim((string)($data['title'] ?? '')); $description=trim((string)($data['description'] ?? '')); $category=trim((string)($data['category'] ?? '')); $city=trim((string)($data['city'] ?? '')); $price=filter_var($data['price'] ?? null,FILTER_VALIDATE_FLOAT); $type=($data['type'] ?? 'sale')==='wanted'?'wanted':'sale';
         if ($title===''||mb_strlen($title)>180||$description===''||$city===''||$price===false||$price<0||$category==='') respond(['error'=>'Complete all required listing fields with a valid price.'],422);
         $q=$pdo->prepare('SELECT id FROM categories WHERE name=? OR slug=?'); $q->execute([$category,$category]); $categoryId=$q->fetchColumn(); if (!$categoryId) respond(['error'=>'Choose a valid category.'],422);
+        $uploadedPublicIds = [];
+        $uploadTransactionOpen = true;
         $pdo->beginTransaction();
         $q=$pdo->prepare('INSERT INTO annonce (user_id,category_id,annonce_type,title,description,price,city,item_condition,date_publication,date_expiration) VALUES (?,?,?,?,?,?,?,?,CURDATE(),calculer_date_expiration(CURDATE()))');
         $q->execute([$current['id'],$categoryId,$type,$title,$description,$price,$city,trim((string)($data['condition'] ?? '')) ?: null]); $newId=(int)$pdo->lastInsertId();
         $files=$_FILES['images'] ?? $_FILES['photo'] ?? null;
-        if ($files) {
-            $names=is_array($files['name'] ?? null)?$files['name']:[$files['name']]; $max=min(count($names),5);
-            for($i=0;$i<$max;$i++) { $file=is_array($files['name'])?['name'=>$files['name'][$i],'type'=>$files['type'][$i]??'','tmp_name'=>$files['tmp_name'][$i]??'','error'=>$files['error'][$i]??UPLOAD_ERR_NO_FILE,'size'=>$files['size'][$i]??0]:$files; saveImage($pdo,$newId,$file,$i); }
+        if (is_array($files)) {
+            $uploads = normalizeUploadedFiles($files);
+            if (count($uploads) > 5) throw new UploadValidationException('You can upload up to 5 images per announcement.');
+            foreach ($uploads as $position => $file) saveImage($pdo,$newId,$file,$position,$uploadedPublicIds);
         }
-        $pdo->commit(); respond(['listing'=>listing($pdo,$newId)],201);
+        $pdo->commit();
+        $uploadTransactionOpen = false;
+        respond(['listing'=>listing($pdo,$newId)],201);
     }
     if ($resource === 'listings' && $id && $sub === '' && in_array($method,['PATCH','DELETE'],true)) {
         $current=requireUser(); requireCsrf(); $item=listing($pdo,$id);
@@ -175,8 +180,25 @@ try {
 
     respond(['error'=>'Route not found.'],404);
 } catch (Throwable $e) {
-    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
-    error_log('QuickAnnonces request failed: '.get_class($e));
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+        if (!empty($uploadTransactionOpen)) {
+            foreach (($uploadedPublicIds ?? []) as $publicId) {
+                try { cloudinary()->uploadApi()->destroy($publicId, ['resource_type' => 'image']); }
+                catch (Throwable $cleanupError) {
+                    error_log('QuickAnnonces Cloudinary cleanup failed: ' . get_class($cleanupError) . ': ' . $cleanupError->getMessage());
+                }
+            }
+        }
+    }
+    error_log(sprintf(
+        'QuickAnnonces request failed: %s: %s in %s:%d',
+        get_class($e),
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine()
+    ));
+    if ($e instanceof UploadValidationException) respond(['error' => $e->getMessage()], 422);
     respond(['error'=>'The request could not be completed. Check server configuration and try again.'],500);
 }
 

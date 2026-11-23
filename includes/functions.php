@@ -36,21 +36,69 @@ function listing(PDO $pdo, int $id): ?array
     return $row ?: null;
 }
 
-function saveImage(PDO $pdo, int $adId, array $file, int $position): void
+final class UploadValidationException extends RuntimeException {}
+
+function saveImage(PDO $pdo, int $adId, array $file, int $position, array &$uploadedPublicIds): void
 {
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return;
-    if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK || ($file['size'] ?? 0) > 8 * 1024 * 1024) respond(['error' => 'Each image must be 8 MB or smaller.'], 422);
-    $tmp = $file['tmp_name'] ?? '';
-    if (!$tmp || !is_uploaded_file($tmp)) respond(['error' => 'Invalid image upload.'], 422);
+    $error = filter_var($file['error'] ?? UPLOAD_ERR_NO_FILE, FILTER_VALIDATE_INT);
+    if ($error === UPLOAD_ERR_NO_FILE) return;
+    if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE || (int)($file['size'] ?? 0) > 8 * 1024 * 1024) {
+        throw new UploadValidationException('Each image must be 8 MB or smaller.');
+    }
+    if ($error !== UPLOAD_ERR_OK) throw new UploadValidationException('The image could not be uploaded. Please try again.');
+
+    $tmp = is_string($file['tmp_name'] ?? null) ? $file['tmp_name'] : '';
+    $name = is_string($file['name'] ?? null) ? $file['name'] : '';
+    if ($tmp === '' || !is_uploaded_file($tmp)) throw new UploadValidationException('Invalid image upload.');
+
+    $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmp);
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-    if (!isset($allowed[$mime]) || strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION)) !== $allowed[$mime]) respond(['error' => 'Use a JPG, PNG, or WebP image.'], 422);
-    $result = cloudinary()->uploadApi()->upload($tmp, ['folder' => 'quickannonces', 'resource_type' => 'image', 'allowed_formats' => ['jpg', 'png', 'webp'], 'overwrite' => false]);
+    $allowed = [
+        'image/jpeg' => ['jpg', 'jpeg'],
+        'image/png' => ['png'],
+        'image/webp' => ['webp'],
+    ];
+    if (!is_string($mime) || !isset($allowed[$mime]) || !in_array($extension, $allowed[$mime], true)) {
+        throw new UploadValidationException('Use a JPG, PNG, or WebP image.');
+    }
+
+    $result = cloudinary()->uploadApi()->upload($tmp, [
+        'folder' => 'quickannonces',
+        'resource_type' => 'image',
+        'allowed_formats' => ['jpg', 'jpeg', 'png', 'webp'],
+        'overwrite' => false,
+    ]);
     $secureUrl = $result['secure_url'] ?? null;
     $publicId = $result['public_id'] ?? null;
-    if (!$secureUrl || !$publicId) throw new RuntimeException('Image storage returned an incomplete result.');
+    if (!is_string($secureUrl) || $secureUrl === '' || !is_string($publicId) || $publicId === '') {
+        throw new RuntimeException('Image storage returned an incomplete result.');
+    }
+    $uploadedPublicIds[] = $publicId;
+
     $q = $pdo->prepare('INSERT INTO annonce_images (annonce_id, cloudinary_public_id, image_url, position) VALUES (?, ?, ?, ?)');
     $q->execute([$adId, $publicId, $secureUrl, $position]);
+}
+
+/** Convert PHP's column-oriented $_FILES structure into one record per file. */
+function normalizeUploadedFiles(array $files): array
+{
+    if (!array_key_exists('name', $files)) return [];
+    $names = is_array($files['name']) ? $files['name'] : [$files['name']];
+    $normalized = [];
+    foreach ($names as $index => $name) {
+        $get = static function (string $key) use ($files, $index): mixed {
+            $value = $files[$key] ?? null;
+            return is_array($value) ? ($value[$index] ?? null) : $value;
+        };
+        $normalized[] = [
+            'name' => $name,
+            'type' => $get('type'),
+            'tmp_name' => $get('tmp_name'),
+            'error' => $get('error') ?? UPLOAD_ERR_NO_FILE,
+            'size' => $get('size') ?? 0,
+        ];
+    }
+    return $normalized;
 }
 
 // Base URL used in emailed links. Never derived from the request Host header,
