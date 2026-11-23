@@ -135,6 +135,9 @@ input::placeholder, textarea::placeholder { color: #9aa4b4; }
 .success { background: #f0fdf4; border-color: #dcfce7; color: #166534; }
 .match-row { display: grid; grid-template-columns: 70px minmax(0,1fr) auto; align-items: center; gap: 15px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 12px; background: white; }
 .mini-visual { height: 66px; width: 70px; display: grid; place-items: center; background: #eff6ff; border-radius: 11px; font-size: 30px; }
+.mini-visual img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.moderation-thumbnails { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.moderation-thumbnails img { width: 48px; height: 48px; object-fit: cover; border: 1px solid var(--line); border-radius: 7px; }
 .match-score { font-weight: 800; color: var(--green); white-space: nowrap; }
 .comparison { overflow-x: auto; }
 .comparison table { width: 100%; border-collapse: collapse; min-width: 600px; }

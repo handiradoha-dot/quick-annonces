@@ -448,7 +448,15 @@ async function loadAdmin() {
     const host = $("#moderation-list"); if (!host) return;
     host.innerHTML = rows.map(row => {
       const item = liveListing(row);
-      return `<div class="match-row" data-id="${item.id}"><div class="mini-visual">${item.emoji}</div><div><span class="pill">${escapeHTML(item.type)}</span><strong style="display:block;margin-top:6px">${escapeHTML(item.title)}</strong><div class="price">${money(item.price)}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.seller)}</div></div><div><span class="pill">${escapeHTML(row.status)}</span><div class="actions" style="margin-top:10px"><button class="btn btn-primary" data-moderate="validé">Valider</button><button class="btn btn-danger" data-moderate="refusé">Refuser</button></div></div></div>`;
+      const images = Array.isArray(item.images) ? item.images : [];
+      const cover = images[0]?.image_url;
+      const visual = cover
+        ? `<img src="${escapeHTML(cover)}" alt="Photo de ${escapeHTML(item.title)}" loading="lazy">`
+        : item.emoji;
+      const extraPhotos = images.length > 1
+        ? `<div class="moderation-thumbnails" aria-label="Autres photos de l’annonce">${images.slice(1).map((image, index) => `<img src="${escapeHTML(image.image_url)}" alt="Photo ${index + 2} de ${escapeHTML(item.title)}" loading="lazy">`).join("")}</div>`
+        : "";
+      return `<div class="match-row" data-id="${item.id}"><div class="mini-visual">${visual}</div><div><span class="pill">${escapeHTML(item.type)}</span><strong style="display:block;margin-top:6px">${escapeHTML(item.title)}</strong><div class="price">${money(item.price)}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.seller)}</div>${extraPhotos}</div><div><span class="pill">${escapeHTML(row.status)}</span><div class="actions" style="margin-top:10px"><button class="btn btn-primary" data-moderate="validé">Valider</button><button class="btn btn-danger" data-moderate="refusé">Refuser</button></div></div></div>`;
     }).join("") || `<div class="empty">Aucune annonce à modérer.</div>`;
   } catch (error) { showApiError(error); }
 }
