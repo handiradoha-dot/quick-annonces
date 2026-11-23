@@ -187,7 +187,7 @@ function messagesPage() {
 function loginPage(register = false) {
   shell(`<div class="auth-wrap"><aside class="auth-side"><a class="logo" href="#/home"><span class="logo-mark">Q</span>QuickAnnonces</a><h1>${register?"Rejoignez QuickAnnonces gratuitement.":"Ravi de vous revoir !"}</h1><p>${register?"Créez un compte pour publier, enregistrer vos favoris et contacter les vendeurs.":"Connectez-vous pour publier et gérer vos annonces."}</p><div class="notice">✓ Des annonces près de chez vous<br>✓ Des échanges simples et directs<br>✓ Un espace pour gérer vos annonces</div></aside>
   <section class="auth-form"><h2>${register?"Créer un compte":"Se connecter"}</h2><p>${register?"Remplissez les informations ci-dessous.":"Accédez à votre espace QuickAnnonces."}</p>
-  <form id="auth-form">${register?`<div class="field"><label>Nom complet</label><input name="name" placeholder="Votre nom" required></div>`:""}
+  <form id="auth-form">${register?`<div class="field"><label>Nom complet</label><input name="name" placeholder="Votre nom" required></div><div class="field"><label>Numéro de téléphone</label><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="0612345678" pattern="(05|06)[0-9]{8}" minlength="10" maxlength="10" title="Entrez 10 chiffres, en commençant par 05 ou 06." required></div>`:""}
   <div class="field"><label>Adresse e-mail</label><input name="email" type="email" placeholder="exemple@email.com" required></div>
   <div class="field"><label>Mot de passe</label><input name="password" type="password" placeholder="••••••••" required minlength="10"></div>
   ${register?`<div class="field"><label>Confirmer le mot de passe</label><input name="confirm" type="password" placeholder="••••••••" required minlength="10"></div>`:`<div style="text-align:right"><a class="text-link small" href="#/forgot">Mot de passe oublié ?</a></div>`}
@@ -577,7 +577,7 @@ document.addEventListener("submit", async event => {
       if (id === "auth-form") {
         if (fd.has("confirm") && fd.get("password") !== fd.get("confirm")) throw new Error("Les mots de passe ne correspondent pas.");
         const register = fd.has("name");
-        result = await apiRequest(`auth/${register ? "register" : "login"}`, { method: "POST", body: JSON.stringify(register ? { name: fd.get("name"), email: fd.get("email"), password: fd.get("password") } : { email: fd.get("email"), password: fd.get("password") }) });
+        result = await apiRequest(`auth/${register ? "register" : "login"}`, { method: "POST", body: JSON.stringify(register ? { name: fd.get("name"), email: fd.get("email"), phone: fd.get("phone"), password: fd.get("password") } : { email: fd.get("email"), password: fd.get("password") }) });
         state.currentUser = result.user; state.csrf = result.csrf; toast(register ? "Compte créé." : "Connexion réussie."); location.assign("./account.html"); return;
       }
       if (id === "publish-form") {

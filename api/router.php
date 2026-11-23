@@ -92,10 +92,12 @@ try {
         $data = input();
         $name = trim((string)($data['name'] ?? ''));
         $email = strtolower(trim((string)($data['email'] ?? '')));
+        $phone = trim((string)($data['phone'] ?? ''));
         $password = (string)($data['password'] ?? '');
         if (mb_strlen($name) < 2 || mb_strlen($name) > 120 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 10) respond(['error' => 'Enter a name, valid email, and password of at least 10 characters.'], 422);
-        $q = $pdo->prepare('INSERT INTO users (full_name,email,password_hash) VALUES (?,?,?)');
-        try { $q->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT)]); }
+        if (!preg_match('/^(05|06)[0-9]{8}$/D', $phone)) respond(['error' => 'Enter a 10-digit phone number starting with 05 or 06.'], 422);
+        $q = $pdo->prepare('INSERT INTO users (full_name,email,password_hash,phone) VALUES (?,?,?,?)');
+        try { $q->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT), $phone]); }
         catch (PDOException $e) { if ($e->getCode() === '23000') respond(['error' => 'An account with that email already exists.'], 409); throw $e; }
         $_SESSION['user'] = ['id' => (int)$pdo->lastInsertId(), 'full_name' => $name, 'email' => $email, 'role' => 'user'];
         $_SESSION['csrf'] = bin2hex(random_bytes(32));

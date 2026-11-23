@@ -82,7 +82,7 @@ The root `ca.pem` is used for verified MySQL TLS. `composer install` creates `ve
 
 ## Current feature coverage
 
-- Accounts: registration, login, logout, password hashing, signed one-week HttpOnly cookies and CSRF tokens.
+- Accounts: new registrations require a 10-digit Moroccan phone number beginning with `05` or `06`; existing accounts may keep a null phone. Login and administrator access are unchanged. Registration, password hashing, signed one-week HttpOnly cookies and CSRF tokens remain in place.
 - Password reset: `POST /api/auth/forgot` emails a one-hour, single-use link (`login.html#/reset/<token>`) through Resend; `POST /api/auth/reset` sets the new password. Tokens are stored hashed in `password_reset_tokens`.
 - Listings: approved listing search/detail, create (pending moderation), owner's listings, edit and delete API operations.
 - Photos: JPG and JPEG uploads up to 8 MB each (maximum five per listing) are MIME-checked by PHP and sent to Cloudinary; URLs and public IDs are stored in MySQL. Configure `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in Vercel or the local `.env`.
