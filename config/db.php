@@ -34,5 +34,12 @@ function cloudinary(): Cloudinary
     $key = envValue('CLOUDINARY_API_KEY');
     $secret = envValue('CLOUDINARY_API_SECRET');
     if (!$cloud || !$key || !$secret) throw new RuntimeException('Image storage is not configured.');
-    return new Cloudinary(['cloud' => ['cloud_name' => $cloud], 'api' => ['key' => $key, 'secret' => $secret], 'url' => ['secure' => true]]);
+    return new Cloudinary([
+        'cloud' => [
+            'cloud_name' => $cloud,
+            'api_key' => $key,
+            'api_secret' => $secret,
+        ],
+        'url' => ['secure' => true],
+    ]);
 }
