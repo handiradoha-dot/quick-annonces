@@ -4,13 +4,17 @@ QuickAnnonces serves one home page at `public/index.html`, with dedicated login,
 
 ## Before deploying
 
-1. Load `quickannonces_database.sql` into the Aiven database named `quickannonces`. The SQL creates the database and tables; it is written for a new, empty database. If you already imported it into Aiven's `defaultdb`, set `DB_NAME=defaultdb` instead.
+1. Load `quickannonces_database.sql` into the Aiven database named `quickannonces`. The SQL creates the tables, phone and image format checks, expiration and reporting routines, announcement triggers, copy table, and Tanger view; it is written for a new, empty database. If you already imported it into Aiven's `defaultdb`, set `DB_NAME=defaultdb` instead.
 2. Set the environment variables listed below in Vercel for Preview and Production, then redeploy.
-3. The app expects users to register; there is no seeded administrator. Promote the intended admin account directly in MySQL by setting its `users.role` to `admin` after registration.
+3. Register the intended administrator, then promote that account directly in MySQL. Replace the example address below with the registered administrator's email:
 
-The existing Aiven expiration migration is `quickannonces_expiration_functions.sql` and targets `defaultdb`. Back up the database and verify what is already installed before applying any part of it; the checks below avoid rerunning non-idempotent schema changes.
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';
+```
 
-The expiration feature requires the migration's `date_publication` and `date_expiration` columns, an `expired` value in the `annonce.status` enum, and the `calculer_date_expiration` function and `desactiver_annonces_expirees` procedure. Do not rerun the full migration blindly: it adds columns and drops/recreates routines. Check the target database first:
+For an existing Aiven installation, `quickannonces_expiration_functions.sql` remains the migration path and targets `defaultdb`. The main schema now includes the expiration columns, status, and routines for new installations. Back up an existing database and verify what is already installed before applying any migration; do not run the new-install schema against an existing database.
+
+The expiration feature requires `date_publication` and `date_expiration` columns, an `expired` value in the `annonce.status` enum, and the `calculer_date_expiration` function and `desactiver_annonces_expirees` procedure. Do not rerun the migration blindly: it adds columns and drops/recreates routines. Check the target database first:
 
 ```sql
 USE defaultdb;
@@ -36,8 +40,8 @@ An announcement is created as `pending` with its publication date set to `CURDAT
 | `DB_HOST` | Aiven host: `mysql-34da4a91-quick-announce-2.c.aivencloud.com` |
 | `DB_PORT` | `20440` |
 | `DB_NAME` | `defaultdb` for the current Aiven setup, where the tables were created |
-| `DB_USER` | `avnadmin` |
-| `DB_PASSWORD` | The Aiven password from the service console; do not paste it into chat or source files |
+| `DB_USER` | The configured application writer account (for example `annonce_user`); do not use `readonly_user` for the API |
+| `DB_PASSWORD` | The password for that Aiven account; do not paste it into chat or source files |
 | `CLOUDINARY_CLOUD_NAME` | `xth8g9ff` |
 | `CLOUDINARY_API_KEY` | The API key shown in Cloudinary |
 | `CLOUDINARY_API_SECRET` | Your current Cloudinary API secret; keep it private |
@@ -53,15 +57,25 @@ The public Aiven CA certificate `ca.pem` is included at the project root and use
 
 For local development, fill in the ignored root `.env` file (or copy `.env.example` first) with your credentials and a random `AUTH_SECRET` of at least 32 characters. `config/env.php` loads `.env` locally; environment variables already set by the process take precedence. `.env` is ignored by Git and excluded from the Docker build. In Vercel, set the same variable names in Project Settings → Environment Variables, then redeploy.
 
-## Local setup
+## Local setup with WAMP
 
-Use PHP 8.4, Composer 2, Docker, and the Vercel CLI. Install the Cloudinary SDK with Composer and commit both `composer.json` and `composer.lock`. Then build the `Dockerfile.vercel` image and exercise `/api/health` and the application with configured environment variables.
+1. Select or install PHP 8.2 or newer in WAMP (`composer.json` requires PHP `^8.2`) and confirm `php -v` reports that version. Enable `pdo_mysql`, `fileinfo`, and `mbstring` in the PHP configuration used by the command line.
+2. From PowerShell, run:
 
-There is no `composer.lock` yet because Composer is not installed in this workspace. The current container build resolves the SDK during image build; generate and commit the lockfile with Composer before treating the build as reproducible.
+```powershell
+cd C:\Users\MSI\Desktop\quick-annonces
+composer install
+php -S 127.0.0.1:8000 dev-router.php
+```
+
+3. Open `http://127.0.0.1:8000/`. `dev-router.php` serves files from `public/` and forwards `/api/*` requests into the existing API router. Fill the ignored root `.env` with the Aiven TLS settings, writer account, Cloudinary keys, and a random `AUTH_SECRET` before testing account or upload workflows. Keep `readonly_user` out of `DB_USER`, because the API creates and updates records.
+
+The root `ca.pem` is used for verified MySQL TLS. `composer install` creates `vendor/` and a lockfile; neither was present in this workspace when checked. The production Docker image currently resolves the Cloudinary dependency during its image build.
 
 ## Backend layout
 
 - `config/db.php` and `config/env.php` provide database, Cloudinary, and environment setup.
+- `dev-router.php` supports local WAMP PHP development; production requests use `Caddyfile` or Vercel rewrites.
 - `api/auth/`, `api/users/`, `api/annonces/`, and `api/admin/` contain the PHP endpoints.
 - `includes/` contains authentication, shared functions, and security helpers.
 - `public/` contains the single home page, login, registration, account, and admin HTML pages plus the shared frontend assets.
@@ -71,7 +85,8 @@ There is no `composer.lock` yet because Composer is not installed in this worksp
 - Accounts: registration, login, logout, password hashing, signed one-week HttpOnly cookies and CSRF tokens.
 - Password reset: `POST /api/auth/forgot` emails a one-hour, single-use link (`login.html#/reset/<token>`) through Resend; `POST /api/auth/reset` sets the new password. Tokens are stored hashed in `password_reset_tokens`.
 - Listings: approved listing search/detail, create (pending moderation), owner's listings, edit and delete API operations.
-- Photos: JPG, PNG and WebP uploads up to 8 MB each (maximum five per listing) go from PHP to Cloudinary; URLs and public IDs are stored in MySQL.
+- Photos: JPG and JPEG uploads up to 8 MB each (maximum five per listing) are MIME-checked by PHP and sent to Cloudinary; URLs and public IDs are stored in MySQL. Configure `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in Vercel or the local `.env`.
+- Admin reports: VTT/Vélo, cheapest PC, announcement count by publication date, totals by city, the Tanger SQL view, recent Rabat announcements and Audi A4 Diesel listings after 2016.
 - Favorites, comments, buyer/seller conversations and messages, saved search alerts, and administrator moderation API.
 - The active frontend and its CSS/JavaScript live in `public/`; the JSON API has separate endpoint files under `api/`.
 
@@ -81,6 +96,5 @@ There is no `composer.lock` yet because Composer is not installed in this worksp
 - A user promoted to admin in MySQL must log out and log in again; the role is read from the session cookie.
 - Registration does not verify email or phone; the original design's verification badges are not implemented as real verification.
 - Dashboard analytics, QuickMatch recommendations, comparison, and seller profile screens are still design demonstrations; their backend workflows are not connected yet.
-- The uploaded SQL must be applied to Aiven before the app can use its API. No Aiven password was supplied, so the live connection could not be checked here.
-- The API and pages were tested end to end against a local SQLite copy of the schema; the Aiven MySQL connection, Cloudinary uploads, Resend delivery and the Docker/Vercel build have not been run against the real services.
+- Aiven TLS connectivity, announcement CRUD in a rolled-back transaction, stored procedures, the date function, Tanger view and both special filters were checked against the configured database. Cloudinary uploads, Resend delivery and the Docker/Vercel build still need a real deployment check.
 - Use Vercel's Container preset if the project is detected as a different framework. `Dockerfile.vercel` is intentionally named to take precedence when another framework is detected.

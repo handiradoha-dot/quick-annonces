@@ -41,6 +41,53 @@ try {
     }
     if ($resource === 'categories' && $method === 'GET') respond(['categories' => $pdo->query('SELECT id, name, slug FROM categories ORDER BY id')->fetchAll()]);
 
+    if ($resource === 'reports' && $method === 'GET') {
+        $current = requireUser();
+        requireAdmin($current);
+
+        if ($sub === 'vtt') {
+            respond(['listings' => listingsForReport($pdo, procedureRows($pdo, 'CALL sp_annonces_vtt_velo()'))]);
+        }
+        if ($sub === 'cheapest-pc') {
+            $items = listingsForReport($pdo, procedureRows($pdo, 'CALL sp_pc_moins_cher()'));
+            respond(['listing' => $items[0] ?? null]);
+        }
+        if ($sub === 'count-by-date') {
+            $date = trim((string)($_GET['date'] ?? ''));
+            $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+            if (!$parsedDate || $parsedDate->format('Y-m-d') !== $date) respond(['error' => 'Choose a valid date.'], 422);
+            $stmt = $pdo->prepare('SELECT fn_nb_annonces_date(?)');
+            $stmt->execute([$date]);
+            $count = (int)$stmt->fetchColumn();
+            $stmt->closeCursor();
+            respond(['date' => $date, 'count' => $count]);
+        }
+        if ($sub === 'by-city') {
+            respond(['cities' => procedureRows($pdo, 'CALL sp_total_annonces_par_ville()')]);
+        }
+        if ($sub === 'tanger') {
+            $stmt = $pdo->query('SELECT id FROM VueAnnoncesTanger ORDER BY created_at DESC, id DESC LIMIT 100');
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt->closeCursor();
+            respond(['listings' => listingsForReport($pdo, $rows)]);
+        }
+        if ($sub === 'recent-rabat') {
+            $stmt = $pdo->prepare("SELECT id FROM annonce WHERE city=? AND COALESCE(date_publication, DATE(created_at)) BETWEEN DATE_SUB(CURDATE(), INTERVAL 2 DAY) AND CURDATE() ORDER BY COALESCE(date_publication, DATE(created_at)) DESC, id DESC LIMIT 100");
+            $stmt->execute(['Rabat']);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt->closeCursor();
+            respond(['listings' => listingsForReport($pdo, $rows)]);
+        }
+        if ($sub === 'audi-after-2016') {
+            $stmt = $pdo->prepare("SELECT id FROM annonce WHERE LOWER(CONCAT(title, ' ', description)) LIKE ? AND CAST(REGEXP_SUBSTR(CONCAT(title, ' ', description), '(19|20)[0-9]{2}') AS UNSIGNED) > ? ORDER BY CAST(REGEXP_SUBSTR(CONCAT(title, ' ', description), '(19|20)[0-9]{2}') AS UNSIGNED) DESC, created_at DESC LIMIT 100");
+            $stmt->execute(['%audi a4 diesel%', 2016]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt->closeCursor();
+            respond(['listings' => listingsForReport($pdo, $rows)]);
+        }
+        respond(['error' => 'Report not found.'], 404);
+    }
+
     if ($resource === 'auth' && $sub === 'register' && $method === 'POST') {
         $data = input();
         $name = trim((string)($data['name'] ?? ''));
@@ -98,11 +145,16 @@ try {
     if ($resource === 'listings' && $method === 'GET' && !$id) {
         $where = ["a.status='approved'", '(a.date_expiration IS NULL OR a.date_expiration >= CURDATE())']; $params = [];
         $qText = trim((string)($_GET['q'] ?? '')); $category = trim((string)($_GET['category'] ?? '')); $city = trim((string)($_GET['city'] ?? '')); $type = trim((string)($_GET['type'] ?? ''));
-        if ($qText !== '') { $where[] = '(a.title LIKE ? OR a.description LIKE ?)'; $params[] = '%'.$qText.'%'; $params[] = '%'.$qText.'%'; }
+        if ($qText !== '') { $where[] = '(a.title LIKE ? OR a.description LIKE ? OR a.city LIKE ?)'; $params[] = '%'.$qText.'%'; $params[] = '%'.$qText.'%'; $params[] = '%'.$qText.'%'; }
         if ($category !== '') { $where[] = 'c.slug=?'; $params[] = $category; }
         if ($city !== '') { $where[] = 'a.city=?'; $params[] = $city; }
         if ($type === 'sale' || $type === 'wanted') { $where[] = 'a.annonce_type=?'; $params[] = $type; }
-        $sort = ($_GET['sort'] ?? '') === 'price_asc' ? 'a.price ASC' : (($_GET['sort'] ?? '') === 'price_desc' ? 'a.price DESC' : 'a.created_at DESC');
+        $sort = match ($_GET['sort'] ?? '') {
+            'price_asc' => 'a.price ASC, a.created_at DESC',
+            'price_desc' => 'a.price DESC, a.created_at DESC',
+            'date_asc' => 'a.created_at ASC',
+            default => 'a.created_at DESC',
+        };
         $sql = "SELECT a.id,a.user_id,a.category_id,a.annonce_type,a.title,a.description,a.price,a.currency,a.city,a.item_condition,CASE WHEN a.status='approved' AND a.date_expiration < CURDATE() THEN 'expired' ELSE a.status END AS status,a.created_at,a.date_publication,a.date_expiration,c.name AS category,c.slug AS category_slug,u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE ".implode(' AND ',$where).' ORDER BY '.$sort.' LIMIT 100';
         $stmt=$pdo->prepare($sql); $stmt->execute($params); $items=$stmt->fetchAll();
         foreach ($items as &$item) $item['images']=rowImages($pdo,(int)$item['id']); unset($item);
@@ -138,8 +190,32 @@ try {
         if ((int)$item['user_id']!==(int)$current['id'] && $current['role']!=='admin') respond(['error'=>'You cannot change this listing.'],403);
         if ($method==='DELETE') { $q=$pdo->prepare('DELETE FROM annonce WHERE id=?'); $q->execute([$id]); respond(['ok'=>true]); }
         if ($current['role']==='admin') respond(['error'=>'Moderate listings through the moderation endpoint.'],400);
-        $data=input(); $allowed=['title','description','price','city','item_condition']; $set=[];$values=[];
-        foreach($allowed as $field) if(array_key_exists($field,$data)) { $set[]="$field=?"; $values[]=$data[$field]; }
+        $data=input(); $set=[];$values=[];
+        if (array_key_exists('title', $data)) {
+            $title = trim((string)$data['title']);
+            if ($title === '' || mb_strlen($title) > 180) respond(['error' => 'Title must contain 1 to 180 characters.'], 422);
+            $set[] = 'title=?'; $values[] = $title;
+        }
+        if (array_key_exists('description', $data)) {
+            $description = trim((string)$data['description']);
+            if ($description === '' || mb_strlen($description) > 20000) respond(['error' => 'Description must contain 1 to 20000 characters.'], 422);
+            $set[] = 'description=?'; $values[] = $description;
+        }
+        if (array_key_exists('price', $data)) {
+            $price = filter_var($data['price'], FILTER_VALIDATE_FLOAT);
+            if ($price === false || $price < 0) respond(['error' => 'Enter a valid non-negative price.'], 422);
+            $set[] = 'price=?'; $values[] = $price;
+        }
+        if (array_key_exists('city', $data)) {
+            $city = trim((string)$data['city']);
+            if ($city === '' || mb_strlen($city) > 100) respond(['error' => 'City must contain 1 to 100 characters.'], 422);
+            $set[] = 'city=?'; $values[] = $city;
+        }
+        if (array_key_exists('item_condition', $data)) {
+            $condition = trim((string)$data['item_condition']);
+            if (mb_strlen($condition) > 50) respond(['error' => 'Condition must be at most 50 characters.'], 422);
+            $set[] = 'item_condition=?'; $values[] = $condition !== '' ? $condition : null;
+        }
         if(!$set) respond(['error'=>'No editable fields were provided.'],422);
         $values[]=$id; $q=$pdo->prepare('UPDATE annonce SET '.implode(',',$set).", status='pending' WHERE id=?"); $q->execute($values); respond(['listing'=>listing($pdo,$id)]);
     }

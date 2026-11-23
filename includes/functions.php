@@ -36,6 +36,30 @@ function listing(PDO $pdo, int $id): ?array
     return $row ?: null;
 }
 
+/** Execute a fixed stored-procedure call and release every pending result rowset. */
+function procedureRows(PDO $pdo, string $call): array
+{
+    $stmt = $pdo->query($call);
+    try {
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } finally {
+        $stmt->closeCursor();
+    }
+}
+
+/** Rehydrate report IDs through the normal listing serializer, including images. */
+function listingsForReport(PDO $pdo, array $rows): array
+{
+    $items = [];
+    foreach ($rows as $row) {
+        $id = filter_var($row['id'] ?? null, FILTER_VALIDATE_INT);
+        if ($id === false || $id === null) continue;
+        $item = listing($pdo, (int)$id);
+        if ($item) $items[] = $item;
+    }
+    return $items;
+}
+
 final class UploadValidationException extends RuntimeException {}
 
 function saveImage(PDO $pdo, int $adId, array $file, int $position, array &$uploadedPublicIds): void
@@ -53,19 +77,15 @@ function saveImage(PDO $pdo, int $adId, array $file, int $position, array &$uplo
 
     $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmp);
-    $allowed = [
-        'image/jpeg' => ['jpg', 'jpeg'],
-        'image/png' => ['png'],
-        'image/webp' => ['webp'],
-    ];
+    $allowed = ['image/jpeg' => ['jpg', 'jpeg']];
     if (!is_string($mime) || !isset($allowed[$mime]) || !in_array($extension, $allowed[$mime], true)) {
-        throw new UploadValidationException('Use a JPG, PNG, or WebP image.');
+        throw new UploadValidationException('Use a JPG or JPEG image.');
     }
 
     $result = cloudinary()->uploadApi()->upload($tmp, [
         'folder' => 'quickannonces',
         'resource_type' => 'image',
-        'allowed_formats' => ['jpg', 'jpeg', 'png', 'webp'],
+        'allowed_formats' => ['jpg', 'jpeg'],
         'overwrite' => false,
     ]);
     $secureUrl = $result['secure_url'] ?? null;

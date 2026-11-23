@@ -1,4 +1,4 @@
-/* QuickAnnonces — front-end
+﻿/* QuickAnnonces — front-end
    Navigation par hash ; les données viennent de l'API PHP (/api/...). */
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -121,7 +121,7 @@ function searchPage() {
   shell(`<div class="layout"><aside class="panel filters"><h3>Filtres</h3><form id="filter-form">
     <div class="field"><label for="category">Catégorie</label><select id="category" name="category"><option>Toutes les catégories</option>${categories.map(c=>`<option ${state.category===c?"selected":""}>${escapeHTML(c)}</option>`).join("")}</select>${state.categoryStatus === "error" ? `<small class="meta">Impossible de charger les catégories depuis le serveur.</small>` : ""}</div>
     <div class="field"><label for="type">Type d’annonce</label><select id="type" name="type"><option>Tous</option><option ${state.type==="À vendre"?"selected":""}>À vendre</option><option ${state.type==="Je recherche"?"selected":""}>Je recherche</option></select></div>
-    <div class="field"><label for="sort">Trier par</label><select id="sort" name="sort"><option>Plus récent</option><option ${state.sort==="Prix croissant"?"selected":""}>Prix croissant</option><option ${state.sort==="Prix décroissant"?"selected":""}>Prix décroissant</option></select></div>
+    <div class="field"><label for="sort">Trier par</label><select id="sort" name="sort"><option>Plus récent</option><option ${state.sort==="Plus ancien"?"selected":""}>Plus ancien</option><option ${state.sort==="Prix croissant"?"selected":""}>Prix croissant</option><option ${state.sort==="Prix décroissant"?"selected":""}>Prix décroissant</option></select></div>
     <button class="btn btn-primary btn-block">Appliquer les filtres</button><button type="button" class="btn btn-outline btn-block" id="reset-filters" style="margin-top:8px">Réinitialiser</button></form></aside>
     <section><div class="section-heading"><div><h1>Recherche d’annonces</h1><p>${results.length} annonce(s) trouvée(s)</p></div></div>
     <form class="searchbar" id="results-search"><input name="q" value="${escapeHTML(q)}" placeholder="Rechercher une annonce..."><button class="btn btn-primary">Rechercher</button></form>
@@ -159,7 +159,7 @@ function publishPage() {
   <form id="publish-form" class="panel section"><h2>Informations de l’annonce</h2><div class="field"><label for="ad-title">Titre de l’annonce</label><input id="ad-title" name="title" placeholder="Ex : iPhone 13 en très bon état" required></div>
   <div class="two-col"><div class="field"><label>Catégorie</label><select name="category" required ${state.categoryStatus !== "ready" ? "disabled" : ""}><option value="">${state.categoryStatus === "loading" ? "Chargement des catégories..." : state.categoryStatus === "error" ? "Catégories indisponibles" : "Sélectionner une catégorie"}</option>${categories.map(c=>`<option>${escapeHTML(c)}</option>`).join("")}</select>${state.categoryStatus === "error" ? `<small class="meta">Vérifiez la connexion à Aiven et rechargez la page.</small>` : ""}</div><div class="field"><label>Prix en MAD</label><input name="price" type="number" min="0" placeholder="Prix en MAD" required></div></div>
   <div class="two-col"><div class="field"><label>Localisation</label><select name="city"><option>Tanger</option><option>Tétouan</option><option>Rabat</option><option>Casablanca</option><option>Fès</option><option>Marrakech</option></select></div><div class="field"><label>État</label><select name="condition"><option>Neuf</option><option>Très bon état</option><option>Bon état</option><option>État correct</option></select></div></div>
-  <div class="field"><label>Description</label><textarea name="description" placeholder="Décrivez votre annonce..." required></textarea></div><div class="field"><label>Photos (JPG, PNG ou WebP, 8 Mo max, 5 photos max)</label><input name="images[]" type="file" accept="image/jpeg,image/png,image/webp" multiple></div>
+  <div class="field"><label>Description</label><textarea name="description" placeholder="Décrivez votre annonce..." required></textarea></div><div class="field"><label>Photos (JPG ou JPEG, 8 Mo max, 5 photos max)</label><input name="images[]" type="file" accept="image/jpeg,.jpg,.jpeg" multiple></div>
   <div class="actions"><button class="btn btn-primary">Publier l’annonce</button><a class="btn btn-outline" href="#/my-ads">Annuler</a></div><p class="small">Votre annonce sera visible après validation par un administrateur.</p></form></div>`);
 }
 function myAdsPage() {
@@ -226,8 +226,19 @@ function adminPage() {
     ? `<div class="empty">Connectez-vous avec un compte administrateur.</div>`
     : state.currentUser.role !== "admin"
       ? `<div class="empty">Accès réservé aux administrateurs.</div>`
-      : `<div class="panel"><div class="section-heading"><h2>Annonces à modérer</h2><span class="pill">Données du serveur</span></div><div class="tabs">${[["pending", "En attente"], ["approved", "Validées"], ["rejected", "Refusées"], ["all", "Toutes"]].map(([value, label]) => `<button class="tab ${state.adminFilter === value ? "active" : ""}" data-admin-filter="${value}">${label}</button>`).join("")}</div><div id="moderation-list" class="empty">Chargement…</div></div>`;
-  shell(`${pageTitle("Administration", "Les annonces ci-dessous sont chargées depuis le serveur.")}${content}`);
+      : `<div class="panel"><div class="section-heading"><h2>Annonces à modérer</h2><span class="pill">Données du serveur</span></div><div class="tabs">${[["pending", "En attente"], ["approved", "Validées"], ["rejected", "Refusées"], ["all", "Toutes"]].map(([value, label]) => `<button class="tab ${state.adminFilter === value ? "active" : ""}" data-admin-filter="${value}">${label}</button>`).join("")}</div><div id="moderation-list" class="empty">Chargement…</div></div>
+        <section class="panel section"><div class="section-heading"><div><h2>Rapports de la base de données</h2><p>Résultats calculés à partir des procédures, de la vue et des filtres Aiven.</p></div></div>
+        <div class="report-actions">
+          <button class="btn btn-outline" data-run-report="vtt">Annonces VTT</button>
+          <button class="btn btn-outline" data-run-report="cheapest-pc">PC le moins cher</button>
+          <button class="btn btn-outline" data-run-report="by-city">Total par ville</button>
+          <button class="btn btn-outline" data-run-report="tanger">Annonces de Tanger</button>
+          <button class="btn btn-outline" data-run-report="recent-rabat">Rabat · 2 derniers jours</button>
+          <button class="btn btn-outline" data-run-report="audi-after-2016">Audi A4 Diesel · après 2016</button>
+        </div>
+        <form id="report-date-form" class="report-date-form"><div class="field"><label for="report-date">Date de publication</label><input id="report-date" name="date" type="date" required></div><button class="btn btn-primary">Compter les annonces</button></form>
+        <div id="admin-report-results" class="report-results notice" aria-live="polite">Choisissez un rapport pour afficher les résultats.</div></section>`;
+  shell(`${pageTitle("Administration", "Modérez les annonces et consultez les rapports de la base de données.")}${content}`);
 }
 function sellerPage() {
   shell(`${pageTitle("Profil vendeur", "Les profils publics et évaluations ne sont pas encore connectés à la base de données.")}<div class="panel"><a class="btn btn-primary" href="#/search">Voir les annonces</a></div>`);
@@ -303,6 +314,7 @@ async function apiRequest(path, options = {}) {
   let endpoint;
   if (route.startsWith("auth/")) endpoint = `/api/auth/${route.slice(5)}`;
   else if (route === "categories") endpoint = "/api/categories";
+  else if (route.startsWith("reports/")) endpoint = `/api/reports/${route.slice("reports/".length)}`;
   else if (route === "listings") endpoint = "/api/listings";
   else if (route === "me/listings") endpoint = "/api/me/listings";
   else if (route === "favorites" || route.startsWith("favorites/")) {
@@ -400,7 +412,26 @@ document.addEventListener("click", async event => {
     event.preventDefault(); event.stopImmediatePropagation();
     state.adminFilter = adminFilter.dataset.adminFilter; render(); await loadAdmin(); return;
   }
-  const removeAd = event.target.closest?.("[data-delete-ad]");
+  const reportButton = event.target.closest?.("[data-run-report]");
+  if (reportButton) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    await runAdminReport(reportButton.dataset.runReport); return;
+  }
+  const editAd = event.target.closest?.("[data-edit-ad]");
+  if (editAd) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    const adId = Number(editAd.dataset.editAd);
+    try {
+      const { listing: item } = await apiRequest(`listings/${adId}`);
+      const row = editAd.closest(".match-row");
+      if (!row) return;
+      row.innerHTML = `<form id="edit-listing-form" data-listing-id="${adId}" class="edit-listing-form"><div class="field"><label>Titre</label><input name="title" maxlength="180" required value="${escapeHTML(item.title)}"></div><div class="field"><label>Description</label><textarea name="description" required>${escapeHTML(item.description)}</textarea></div><div class="field"><label>Prix (MAD)</label><input name="price" type="number" min="0" step="0.01" required value="${Number(item.price)}"></div><div class="field"><label>Ville</label><input name="city" maxlength="100" required value="${escapeHTML(item.city)}"></div><div class="field"><label>État</label><input name="item_condition" maxlength="50" value="${escapeHTML(item.item_condition || "")}"></div><div class="actions"><button class="btn btn-primary">Enregistrer</button><button type="button" class="btn btn-outline" data-cancel-edit>Annuler</button></div></form>`;
+    } catch (error) { showApiError(error); }
+    return;
+  }
+  if (event.target.closest?.("[data-cancel-edit]")) {
+    event.preventDefault(); event.stopImmediatePropagation(); await loadMyAds(); return;
+  }  const removeAd = event.target.closest?.("[data-delete-ad]");
   if (removeAd) {
     event.preventDefault(); event.stopImmediatePropagation();
     try { await apiRequest(`listings/${Number(removeAd.dataset.deleteAd)}`, { method: "DELETE" }); toast("Annonce supprimée."); await loadMyAds(); }
@@ -460,17 +491,47 @@ async function loadAdmin() {
     }).join("") || `<div class="empty">Aucune annonce à modérer.</div>`;
   } catch (error) { showApiError(error); }
 }
+async function runAdminReport(report, date = "") {
+  const host = $("#admin-report-results");
+  if (!host) return;
+  host.className = "report-results notice";
+  host.textContent = "Chargement du rapport…";
+  try {
+    const query = date ? `?${new URLSearchParams({ date })}` : "";
+    const result = await apiRequest(`reports/${encodeURIComponent(report)}${query}`);
+    host.className = "report-results";
+    if (report === "count-by-date") {
+      host.innerHTML = `<div class="notice"><strong>${Number(result.count)}</strong> annonce(s) publiée(s) le ${escapeHTML(result.date)}.</div>`;
+      return;
+    }
+    if (report === "by-city") {
+      const cities = Array.isArray(result.cities) ? result.cities : [];
+      host.innerHTML = cities.length
+        ? `<div class="comparison"><table><thead><tr><th>Ville</th><th>Annonces</th></tr></thead><tbody>${cities.map(row => `<tr><td>${escapeHTML(row.city)}</td><td>${Number(row.total_annonces)}</td></tr>`).join("")}</tbody></table></div>`
+        : `<div class="empty">Aucune annonce à compter.</div>`;
+      return;
+    }
+    const rows = report === "cheapest-pc" ? (result.listing ? [result.listing] : []) : (Array.isArray(result.listings) ? result.listings : []);
+    const items = rows.map(liveListing);
+    host.innerHTML = items.length
+      ? `<div class="section-heading"><strong>${items.length} annonce(s)</strong></div><div class="grid three">${items.map(listingCard).join("")}</div>`
+      : `<div class="empty">Aucune annonce ne correspond à ce rapport.</div>`;
+  } catch (error) {
+    host.className = "report-results notice";
+    host.textContent = error.message;
+  }
+}
 async function loadMyAds() {
   if (!state.currentUser) return;
   try {
     const { listings: rows } = await apiRequest("me/listings");
     const items = rows.map(liveListing);
     const host = $("main.container"); if (!host) return;
-    host.innerHTML = `<div class="section-heading"><div>${pageTitle("Mes annonces", "Gérez vos annonces et consultez leur statut.")}</div><a href="#/publish" class="btn btn-primary">＋ Publier une annonce</a></div><div class="panel"><h2>${escapeHTML(state.currentUser.full_name)}</h2><p>${items.length} annonce(s)</p></div><div class="tabs"><button class="tab active" data-myads="all">Toutes</button><button class="tab" data-myads="active">Actives</button><button class="tab" data-myads="pending">En attente</button><button class="tab" data-myads="done">Terminées</button></div><div id="my-ad-list">${items.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Vous n’avez pas encore publié d’annonce.</div>`}</div>`;
+    host.innerHTML = `<div class="section-heading"><div>${pageTitle("Mes annonces", "Gérez vos annonces et consultez leur statut.")}</div><a href="#/publish" class="btn btn-primary">＋ Publier une annonce</a></div><div class="panel"><h2>${escapeHTML(state.currentUser.full_name)}</h2><p>${items.length} annonce(s)</p></div><div class="tabs"><button class="tab active" data-myads="all">Toutes</button><button class="tab" data-myads="active">Actives</button><button class="tab" data-myads="pending">En attente</button><button class="tab" data-myads="done">Terminées</button></div><div id="my-ad-list">${items.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-outline" data-edit-ad="${x.id}">Modifier</button><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Vous n’avez pas encore publié d’annonce.</div>`}</div>`;
     $$('[data-myads]').forEach(button => button.addEventListener("click", () => {
       const filter = button.dataset.myads;
       const shown = items.filter(x => filter === "all" || (filter === "active" && x.status === "approved") || (filter === "pending" && x.status === "pending") || (filter === "done" && ["sold", "archived", "rejected"].includes(x.status)));
-      $("#my-ad-list").innerHTML = shown.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Aucune annonce dans cette catégorie.</div>`;
+      $("#my-ad-list").innerHTML = shown.map(x => `<div class="match-row"><div class="mini-visual">${x.emoji}</div><div><a href="#/detail/${x.id}"><strong>${escapeHTML(x.title)}</strong></a><div class="price">${money(x.price)}</div><div class="meta">${escapeHTML(x.city)} · ${escapeHTML(x.status)}</div></div><button class="btn btn-outline" data-edit-ad="${x.id}">Modifier</button><button class="btn btn-danger" data-delete-ad="${x.id}">Supprimer</button></div>`).join("") || `<div class="empty">Aucune annonce dans cette catégorie.</div>`;
     }));
   } catch (error) { showApiError(error); }
 }
@@ -500,12 +561,18 @@ messagesPage = function() {
 document.addEventListener("submit", async event => {
   const form = event.target;
   const id = form.id;
-  const liveForm = ["auth-form", "publish-form", "comment-form", "message-form", "alert-form", "forgot-form", "reset-form", "filter-form", "results-search", "hero-search", "nav-search"].includes(id);
+  const liveForm = ["auth-form", "publish-form", "edit-listing-form", "comment-form", "message-form", "alert-form", "forgot-form", "reset-form", "filter-form", "results-search", "hero-search", "nav-search", "report-date-form"].includes(id);
   if (!liveForm) return;
   event.preventDefault(); event.stopImmediatePropagation();
   try {
     const fd = new FormData(form);
-    if (["auth-form", "publish-form", "comment-form", "message-form", "alert-form", "forgot-form", "reset-form"].includes(id)) {
+    if (id === "report-date-form") { await runAdminReport("count-by-date", String(fd.get("date") || "")); return; }
+    if (id === "edit-listing-form") {
+      const payload = Object.fromEntries(fd.entries());
+      await apiRequest(`listings/${Number(form.dataset.listingId)}`, { method: "PATCH", body: JSON.stringify(payload) });
+      toast("Annonce modifiée. Elle sera vérifiée par un administrateur."); await loadMyAds(); return;
+    }
+    if (["auth-form", "publish-form", "edit-listing-form", "comment-form", "message-form", "alert-form", "forgot-form", "reset-form"].includes(id)) {
       let result;
       if (id === "auth-form") {
         if (fd.has("confirm") && fd.get("password") !== fd.get("confirm")) throw new Error("Les mots de passe ne correspondent pas.");
@@ -543,7 +610,7 @@ document.addEventListener("submit", async event => {
   } catch (error) { showApiError(error); }
 }, true);
 async function loadSearch() {
-  const query = new URLSearchParams({ q: state.query || "", category: categorySlugs.get(state.category) || "", type: state.type === "À vendre" ? "sale" : state.type === "Je recherche" ? "wanted" : "", sort: state.sort === "Prix croissant" ? "price_asc" : state.sort === "Prix décroissant" ? "price_desc" : "" });
+    const query = new URLSearchParams({ q: state.query || "", category: categorySlugs.get(state.category) || "", type: state.type === "À vendre" ? "sale" : state.type === "Je recherche" ? "wanted" : "", sort: state.sort === "Prix croissant" ? "price_asc" : state.sort === "Prix décroissant" ? "price_desc" : state.sort === "Plus ancien" ? "date_asc" : "date_desc" });
   try { const result = await apiRequest(`listings?${query}`); state.searchResults = result.listings.map(liveListing); render(); }
   catch (error) { showApiError(error); }
 }

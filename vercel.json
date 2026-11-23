@@ -10,6 +10,7 @@
     { "source": "/api/auth/forgot", "destination": "/api/auth/forgot.php" },
     { "source": "/api/auth/reset", "destination": "/api/auth/reset.php" },
     { "source": "/api/categories", "destination": "/api/annonces/categories.php" },
+    { "source": "/api/reports/:report", "destination": "/api/reports.php?report=:report" },
     { "source": "/api/listings/:id/comments", "destination": "/api/annonces/comments.php" },
     { "source": "/api/listings/:id", "destination": "/api/annonces/item.php" },
     { "source": "/api/listings", "destination": "/api/annonces/index.php" },
