@@ -224,7 +224,10 @@ INSERT IGNORE INTO categories (name, slug) VALUES
     ('Mode', 'mode'),
     ('Maison & Jardin', 'maison-jardin'),
     ('Sports', 'sports'),
-    ('Services', 'services');
+    ('Services', 'services'),
+    ('Véhicules', 'vehicules'),
+    ('Vélo', 'velo'),
+    ('Informatique / PC', 'informatique-pc');
 
 -- Rename legacy sample accounts in place when this file is applied to a
 -- database that already contains them. Their IDs, credentials, roles, and

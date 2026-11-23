@@ -314,7 +314,10 @@ async function apiRequest(path, options = {}) {
   let endpoint;
   if (route.startsWith("auth/")) endpoint = `/api/auth/${route.slice(5)}`;
   else if (route === "categories") endpoint = "/api/categories";
-  else if (route.startsWith("reports/")) endpoint = `/api/reports/${route.slice("reports/".length)}`;
+  else if (route.startsWith("reports/")) {
+    endpoint = "/api/reports.php";
+    query.set("report", route.slice("reports/".length));
+  }
   else if (route === "listings") endpoint = "/api/listings";
   else if (route === "me/listings") endpoint = "/api/me/listings";
   else if (route === "favorites" || route.startsWith("favorites/")) {

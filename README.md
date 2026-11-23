@@ -14,6 +14,8 @@ UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';
 
 For an existing Aiven installation, `quickannonces_expiration_functions.sql` remains the migration path and targets `defaultdb`. The main schema now includes the expiration columns, status, and routines for new installations. Back up an existing database and verify what is already installed before applying any migration; do not run the new-install schema against an existing database.
 
+The sample announcement data is in `quickannonces_seed_annonces.sql`. It targets the existing `defaultdb`, uses the updated `youssef.benali@gmail.com` and `salma.elidrissi@gmail.com` accounts, and safely skips rows already present. Run this file only after those accounts and the `vehicules`, `velo`, and `informatique-pc` categories exist. Its inserts use the database triggers for publication dates and archiving.
+
 The expiration feature requires `date_publication` and `date_expiration` columns, an `expired` value in the `annonce.status` enum, and the `calculer_date_expiration` function and `desactiver_annonces_expirees` procedure. Do not rerun the migration blindly: it adds columns and drops/recreates routines. Check the target database first:
 
 ```sql
