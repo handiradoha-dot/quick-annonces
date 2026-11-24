@@ -191,6 +191,7 @@ input::placeholder, textarea::placeholder { color: #9aa4b4; }
 .report-date-form .field { flex: 1 1 220px; margin: 0; }
 .report-results { min-height: 52px; margin-top: 16px; }
 .report-results .grid { margin-top: 12px; }
+button:disabled, input[type="submit"]:disabled { opacity: .65; cursor: wait; }
 @media (max-width: 760px) {
   .report-actions .btn { flex: 1 1 180px; }
   .report-date-form .btn { width: 100%; }

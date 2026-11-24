@@ -567,6 +567,15 @@ document.addEventListener("submit", async event => {
   const liveForm = ["auth-form", "publish-form", "edit-listing-form", "comment-form", "message-form", "alert-form", "forgot-form", "reset-form", "filter-form", "results-search", "hero-search", "nav-search", "report-date-form"].includes(id);
   if (!liveForm) return;
   event.preventDefault(); event.stopImmediatePropagation();
+  if (form.dataset.submitting === "true") return;
+  form.dataset.submitting = "true";
+  form.setAttribute("aria-busy", "true");
+  const submitButtons = [...form.querySelectorAll('button:not([type]),button[type="submit"],input[type="submit"]')];
+  const buttonStates = submitButtons.map(button => ({ button, disabled: button.disabled, text: button.textContent }));
+  for (const button of submitButtons) {
+    button.disabled = true;
+    if (id === "publish-form") button.textContent = "Envoi en cours…";
+  }
   try {
     const fd = new FormData(form);
     if (id === "report-date-form") { await runAdminReport("count-by-date", String(fd.get("date") || "")); return; }
@@ -587,7 +596,7 @@ document.addEventListener("submit", async event => {
         const payload = new FormData(form);
         payload.set("type", form.dataset.type === "Je recherche" ? "wanted" : "sale");
         result = await apiRequest("listings", { method: "POST", body: payload });
-        toast("Annonce envoyée. Elle sera visible après modération."); await refreshListings(); go("my-ads"); return;
+        toast(result.duplicate ? "Cette annonce a déjà été envoyée. Retrouvez-la dans Mes annonces." : "Annonce envoyée. Elle sera visible après modération."); await refreshListings(); go("my-ads"); return;
       }
       if (id === "comment-form") { await apiRequest(`listings/${currentRoute().id}/comments`, { method: "POST", body: JSON.stringify({ comment: fd.get("comment") }) }); toast("Commentaire publié."); render(); return; }
       if (id === "message-form") {
@@ -611,6 +620,14 @@ document.addEventListener("submit", async event => {
     if (id === "filter-form") { state.category = fd.get("category"); state.type = fd.get("type"); state.sort = fd.get("sort"); await loadSearch(); return; }
     if (["results-search", "hero-search", "nav-search"].includes(id)) { state.query = String(fd.get("q") || "").trim(); go("search"); await loadSearch(); }
   } catch (error) { showApiError(error); }
+  finally {
+    delete form.dataset.submitting;
+    form.removeAttribute("aria-busy");
+    for (const { button, disabled, text } of buttonStates) {
+      button.disabled = disabled;
+      if (id === "publish-form") button.textContent = text;
+    }
+  }
 }, true);
 async function loadSearch() {
     const query = new URLSearchParams({ q: state.query || "", category: categorySlugs.get(state.category) || "", type: state.type === "À vendre" ? "sale" : state.type === "Je recherche" ? "wanted" : "", sort: state.sort === "Prix croissant" ? "price_asc" : state.sort === "Prix décroissant" ? "price_desc" : state.sort === "Plus ancien" ? "date_asc" : "date_desc" });

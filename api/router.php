@@ -171,20 +171,39 @@ try {
         $title=trim((string)($data['title'] ?? '')); $description=trim((string)($data['description'] ?? '')); $category=trim((string)($data['category'] ?? '')); $city=trim((string)($data['city'] ?? '')); $price=filter_var($data['price'] ?? null,FILTER_VALIDATE_FLOAT); $type=($data['type'] ?? 'sale')==='wanted'?'wanted':'sale';
         if ($title===''||mb_strlen($title)>180||$description===''||$city===''||$price===false||$price<0||$category==='') respond(['error'=>'Complete all required listing fields with a valid price.'],422);
         $q=$pdo->prepare('SELECT id FROM categories WHERE name=? OR slug=?'); $q->execute([$category,$category]); $categoryId=$q->fetchColumn(); if (!$categoryId) respond(['error'=>'Choose a valid category.'],422);
+        $condition=trim((string)($data['condition'] ?? '')) ?: null;
+        $files=$_FILES['images'] ?? $_FILES['photo'] ?? null;
+        $uploads=is_array($files) ? normalizeUploadedFiles($files) : [];
+        if (count(array_filter($uploads, static fn(array $file): bool => (int)$file['error'] !== UPLOAD_ERR_NO_FILE)) > 5) throw new UploadValidationException('You can upload up to 5 images per announcement.');
+        $imageCount=count(array_filter($uploads, static fn(array $file): bool => (int)$file['error'] !== UPLOAD_ERR_NO_FILE));
+        // Serialize identical submissions and reuse the original row on retries.
+        // The lock is per account + listing content + number of selected photos.
+        $submissionParts=[(int)$current['id'],(int)$categoryId,$type,$title,$description,number_format((float)$price,2,'.',''),$city,$condition,$imageCount];
+        $fingerprint=hash('sha256',json_encode($submissionParts,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_INVALID_UTF8_SUBSTITUTE));
+        $listingSubmissionLock='qa_ad_'.substr($fingerprint,0,58);
+        $lockStmt=$pdo->prepare('SELECT GET_LOCK(?, 60)');
+        $lockStmt->execute([$listingSubmissionLock]);
+        $lockAcquired=(int)$lockStmt->fetchColumn()===1;
+        $lockStmt->closeCursor();
+        if (!$lockAcquired) { $listingSubmissionLock=null; respond(['error'=>'A matching announcement is still being submitted. Please wait a moment and check My Ads before trying again.'],409); }
+        $duplicateStmt=$pdo->prepare("SELECT a.id FROM annonce a WHERE a.user_id=? AND a.category_id=? AND a.annonce_type=? AND a.title=? AND a.description=? AND a.price=? AND a.city=? AND a.item_condition <=> ? AND a.status IN ('pending','approved') AND a.created_at>=DATE_SUB(NOW(),INTERVAL 10 MINUTE) AND (SELECT COUNT(*) FROM annonce_images ai WHERE ai.annonce_id=a.id)=? ORDER BY a.id DESC LIMIT 1");
+        $duplicateStmt->execute([(int)$current['id'],(int)$categoryId,$type,$title,$description,$price,$city,$condition,$imageCount]);
+        $duplicateId=$duplicateStmt->fetchColumn();
+        $duplicateStmt->closeCursor();
+        if ($duplicateId) {
+            $releaseStmt=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $releaseStmt->execute([$listingSubmissionLock]); $releaseStmt->closeCursor(); $listingSubmissionLock=null;
+            respond(['listing'=>listing($pdo,(int)$duplicateId),'duplicate'=>true],200);
+        }
         $uploadedPublicIds = [];
         $uploadTransactionOpen = true;
         $pdo->beginTransaction();
         $q=$pdo->prepare('INSERT INTO annonce (user_id,category_id,annonce_type,title,description,price,city,item_condition,date_publication,date_expiration) VALUES (?,?,?,?,?,?,?,?,CURDATE(),calculer_date_expiration(CURDATE()))');
-        $q->execute([$current['id'],$categoryId,$type,$title,$description,$price,$city,trim((string)($data['condition'] ?? '')) ?: null]); $newId=(int)$pdo->lastInsertId();
-        $files=$_FILES['images'] ?? $_FILES['photo'] ?? null;
-        if (is_array($files)) {
-            $uploads = normalizeUploadedFiles($files);
-            if (count($uploads) > 5) throw new UploadValidationException('You can upload up to 5 images per announcement.');
-            foreach ($uploads as $position => $file) saveImage($pdo,$newId,$file,$position,$uploadedPublicIds);
-        }
+        $q->execute([$current['id'],$categoryId,$type,$title,$description,$price,$city,$condition]); $newId=(int)$pdo->lastInsertId();
+        foreach ($uploads as $position => $file) saveImage($pdo,$newId,$file,$position,$uploadedPublicIds);
         $pdo->commit();
         $uploadTransactionOpen = false;
-        respond(['listing'=>listing($pdo,$newId)],201);
+        $releaseStmt=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $releaseStmt->execute([$listingSubmissionLock]); $releaseStmt->closeCursor(); $listingSubmissionLock=null;
+        respond(['listing'=>listing($pdo,$newId),'duplicate'=>false],201);
     }
     if ($resource === 'listings' && $id && $sub === '' && in_array($method,['PATCH','DELETE'],true)) {
         $current=requireUser(); requireCsrf(); $item=listing($pdo,$id);
@@ -268,6 +287,10 @@ try {
                 }
             }
         }
+    }
+    if (!empty($listingSubmissionLock) && isset($pdo) && $pdo instanceof PDO) {
+        try { $releaseStmt=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $releaseStmt->execute([$listingSubmissionLock]); $releaseStmt->closeCursor(); }
+        catch (Throwable $lockError) { error_log('QuickAnnonces submission lock release failed: ' . get_class($lockError)); }
     }
     error_log(sprintf(
         'QuickAnnonces request failed: %s: %s in %s:%d',
