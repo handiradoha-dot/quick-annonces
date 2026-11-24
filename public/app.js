@@ -84,7 +84,7 @@ function listingCard(item) {
   const saved = state.favorites.has(item.id);
   const cover = item.images?.[0]?.image_url;
   return `<article class="listing">
-    <div class="listing-image"><span class="pill">${escapeHTML(item.type)}</span><button class="heart ${saved ? "saved" : ""}" data-fav="${item.id}" aria-label="Ajouter aux favoris">${saved ? "♥" : "♡"}</button>${cover ? `<img src="${escapeHTML(cover)}" alt="${escapeHTML(item.title)}">` : `<span>${escapeHTML(item.emoji)}</span>`}</div>
+    <div class="listing-image"><span class="pill">${escapeHTML(item.type)}</span><button class="heart ${saved ? "saved" : ""}" data-fav="${item.id}" aria-label="Ajouter aux favoris">${saved ? "♥" : "♡"}</button>${cover ? `<img src="${escapeHTML(cover)}" alt="${escapeHTML(item.title)}" loading="lazy" decoding="async">` : `<span>${escapeHTML(item.emoji)}</span>`}</div>
     <a class="listing-body" href="#/detail/${item.id}"><h3>${escapeHTML(item.title)}</h3><div class="price">${money(item.price)}</div><div class="meta">📍 ${escapeHTML(item.city)} · ${escapeHTML(item.age)}</div></a>
   </article>`;
 }
@@ -245,6 +245,38 @@ function sellerPage() {
 }
 function notFoundPage() { shell(`<div class="empty"><div class="emoji">🧭</div><h2>Page introuvable</h2><p>La page demandée n’existe pas dans cette maquette.</p><a class="btn btn-primary" href="#/home">Retour à l’accueil</a></div>`); }
 function escapeHTML(value = "") { return String(value).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[ch])); }
+async function optimizeJpegUpload(file) {
+  if (file.type !== "image/jpeg" || typeof createImageBitmap !== "function") return file;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 1.5 * 1024 * 1024) { bitmap.close(); return file; }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d", { alpha: false }).drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    bitmap.close(); bitmap = null;
+    if (!blob || blob.size >= file.size) return file;
+    const name = file.name.replace(/\.jpe?g$/i, "") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg", lastModified: file.lastModified });
+  } catch {
+    bitmap?.close();
+    return file;
+  }
+}
+async function optimizedListingFormData(form) {
+  const payload = new FormData(form);
+  const input = form.elements.namedItem("images[]");
+  const files = Array.from(input?.files || []);
+  if (!files.length) return payload;
+  payload.delete("images[]");
+  const optimized = [];
+  for (const file of files) optimized.push(await optimizeJpegUpload(file));
+  optimized.forEach(file => payload.append("images[]", file, file.name));
+  return payload;
+}
 
 function render() {
   const { page, id } = currentRoute();
@@ -355,12 +387,15 @@ function liveListing(row) {
 }
 async function refreshListings() {
   try {
-    const { listings: rows } = await apiRequest("listings");
+    const [listingResult, favoriteResult] = await Promise.all([
+      apiRequest("listings"),
+      state.currentUser ? apiRequest("favorites") : Promise.resolve({ listings: [] })
+    ]);
+    const rows = listingResult.listings;
     listings.splice(0, listings.length, ...rows.map(liveListing));
     state.backendReady = true;
     state.apiStatus = "ready";
-    const favs = state.currentUser ? await apiRequest("favorites") : { listings: [] };
-    state.favorites = new Set((favs.listings || []).map(x => Number(x.id)));
+    state.favorites = new Set((favoriteResult.listings || []).map(x => Number(x.id)));
     rerender();
   } catch (error) {
     state.backendReady = false;
@@ -574,7 +609,7 @@ document.addEventListener("submit", async event => {
   const buttonStates = submitButtons.map(button => ({ button, disabled: button.disabled, text: button.textContent }));
   for (const button of submitButtons) {
     button.disabled = true;
-    if (id === "publish-form") button.textContent = "Envoi en cours…";
+    if (id === "publish-form") button.textContent = "Préparation des photos…";
   }
   try {
     const fd = new FormData(form);
@@ -593,8 +628,9 @@ document.addEventListener("submit", async event => {
         state.currentUser = result.user; state.csrf = result.csrf; toast(register ? "Compte créé." : "Connexion réussie."); location.assign("./account.html"); return;
       }
       if (id === "publish-form") {
-        const payload = new FormData(form);
+        const payload = await optimizedListingFormData(form);
         payload.set("type", form.dataset.type === "Je recherche" ? "wanted" : "sale");
+        for (const button of submitButtons) button.textContent = "Envoi en cours…";
         result = await apiRequest("listings", { method: "POST", body: payload });
         toast(result.duplicate ? "Cette annonce a déjà été envoyée. Retrouvez-la dans Mes annonces." : "Annonce envoyée. Elle sera visible après modération."); await refreshListings(); go("my-ads"); return;
       }
@@ -602,7 +638,11 @@ document.addEventListener("submit", async event => {
       if (id === "message-form") {
         const conv = state.conversationId || Number(new URLSearchParams(location.search).get("conversation"));
         if (!conv) throw new Error("Choisissez une conversation pour envoyer un message.");
-        await apiRequest(`conversations/${conv}/messages`, { method: "POST", body: JSON.stringify({ message: fd.get("message") }) }); toast("Message envoyé."); form.reset(); await loadConversation(conv); return;
+        const saved = await apiRequest(`conversations/${conv}/messages`, { method: "POST", body: JSON.stringify({ message: fd.get("message") }) });
+        toast("Message envoyé."); form.reset();
+        const host = $("#messages");
+        if (host) { const bubble = document.createElement("div"); bubble.className = Number(saved.sender_id) === Number(state.currentUser?.id) ? "bubble mine" : "bubble"; bubble.textContent = String(saved.message_text || ""); host.append(bubble); host.scrollTop = host.scrollHeight; }
+        return;
       }
       if (id === "alert-form") { await apiRequest("alerts", { method: "POST", body: JSON.stringify({ query: fd.get("query"), city: fd.get("city"), max_price: fd.get("budget") || null }) }); toast("Alerte créée."); form.reset(); await loadAlerts(); return; }
       if (id === "forgot-form") {
@@ -650,21 +690,21 @@ async function startBackend() {
     toast("Ouvrez QuickAnnonces via FrankenPHP pour charger les données d’Aiven.");
     return;
   }
-  try { await refreshCategories(); }
-  catch (error) {
+  const categoriesTask = refreshCategories().catch(error => {
     categories.splice(0, categories.length);
     categorySlugs.clear();
     state.categoryStatus = "error";
     render();
     console.error("Could not load categories from Aiven:", error);
     toast(`Catégories Aiven indisponibles : ${error.message}`);
-  }
-  try {
-    const session = await apiRequest("auth/me"); state.currentUser = session.user || null; state.csrf = session.csrf || null;
-  } catch (error) {
+  });
+  const sessionTask = apiRequest("auth/me").then(session => {
+    state.currentUser = session.user || null; state.csrf = session.csrf || null;
+  }).catch(error => {
     state.currentUser = null; state.csrf = null;
     console.error("Could not load the current session:", error);
-  }
+  });
+  await Promise.all([categoriesTask, sessionTask]);
   await refreshListings();
   if (currentRoute().page === "admin" && state.currentUser?.role === "admin") await loadAdmin();
   if (currentRoute().page === "my-ads" && state.currentUser) await loadMyAds();

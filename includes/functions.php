@@ -36,6 +36,46 @@ function listing(PDO $pdo, int $id): ?array
     return $row ?: null;
 }
 
+/** Load photo rows for a result set in one query instead of one query per ad. */
+function attachListingImages(PDO $pdo, array $items): array
+{
+    if (!$items) return [];
+    $ids = array_values(array_unique(array_filter(array_map(static fn(array $item): int => (int)($item['id'] ?? 0), $items))));
+    foreach ($items as &$item) $item['images'] = [];
+    unset($item);
+    if (!$ids) return $items;
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $pdo->prepare("SELECT annonce_id,image_url,cloudinary_public_id,position FROM annonce_images WHERE annonce_id IN ($placeholders) ORDER BY annonce_id,position,id");
+    $stmt->execute($ids);
+    $positions = [];
+    foreach ($items as $index => $item) $positions[(int)$item['id']] = $index;
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $image) {
+        $index = $positions[(int)$image['annonce_id']] ?? null;
+        if ($index === null) continue;
+        unset($image['annonce_id']);
+        $items[$index]['images'][] = $image;
+    }
+    $stmt->closeCursor();
+    return $items;
+}
+
+/** Fetch a set of listings and their photos with two database queries total. */
+function listingsByIds(PDO $pdo, array $ids): array
+{
+    $orderedIds = array_values(array_unique(array_filter(array_map('intval', $ids), static fn(int $id): bool => $id > 0)));
+    if (!$orderedIds) return [];
+    $placeholders = implode(',', array_fill(0, count($orderedIds), '?'));
+    $stmt = $pdo->prepare("SELECT a.id,a.user_id,a.category_id,a.annonce_type,a.title,a.description,a.price,a.currency,a.city,a.item_condition,CASE WHEN a.status='approved' AND a.date_expiration<CURDATE() THEN 'expired' ELSE a.status END AS status,a.created_at,a.date_publication,a.date_expiration,c.name AS category,u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE a.id IN ($placeholders)");
+    $stmt->execute($orderedIds);
+    $byId = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $item) $byId[(int)$item['id']] = $item;
+    $stmt->closeCursor();
+    $ordered = [];
+    foreach ($orderedIds as $id) if (isset($byId[$id])) $ordered[] = $byId[$id];
+    return attachListingImages($pdo, $ordered);
+}
+
 /** Execute a fixed stored-procedure call and release every pending result rowset. */
 function procedureRows(PDO $pdo, string $call): array
 {
@@ -50,22 +90,20 @@ function procedureRows(PDO $pdo, string $call): array
 /** Rehydrate report IDs through the normal listing serializer, including images. */
 function listingsForReport(PDO $pdo, array $rows): array
 {
-    $items = [];
+    $ids = [];
     foreach ($rows as $row) {
         $id = filter_var($row['id'] ?? null, FILTER_VALIDATE_INT);
-        if ($id === false || $id === null) continue;
-        $item = listing($pdo, (int)$id);
-        if ($item) $items[] = $item;
+        if ($id !== false && $id !== null) $ids[] = (int)$id;
     }
-    return $items;
+    return listingsByIds($pdo, $ids);
 }
 
 final class UploadValidationException extends RuntimeException {}
 
-function saveImage(PDO $pdo, int $adId, array $file, int $position, array &$uploadedPublicIds): void
+function saveImage(array $file, int $position, array &$uploadedPublicIds): ?array
 {
     $error = filter_var($file['error'] ?? UPLOAD_ERR_NO_FILE, FILTER_VALIDATE_INT);
-    if ($error === UPLOAD_ERR_NO_FILE) return;
+    if ($error === UPLOAD_ERR_NO_FILE) return null;
     if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE || (int)($file['size'] ?? 0) > 8 * 1024 * 1024) {
         throw new UploadValidationException('Each image must be 8 MB or smaller.');
     }
@@ -94,9 +132,7 @@ function saveImage(PDO $pdo, int $adId, array $file, int $position, array &$uplo
         throw new RuntimeException('Image storage returned an incomplete result.');
     }
     $uploadedPublicIds[] = $publicId;
-
-    $q = $pdo->prepare('INSERT INTO annonce_images (annonce_id, cloudinary_public_id, image_url, position) VALUES (?, ?, ?, ?)');
-    $q->execute([$adId, $publicId, $secureUrl, $position]);
+    return ['cloudinary_public_id' => $publicId, 'image_url' => $secureUrl, 'position' => $position];
 }
 
 /** Convert PHP's column-oriented $_FILES structure into one record per file. */

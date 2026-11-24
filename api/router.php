@@ -159,7 +159,7 @@ try {
         };
         $sql = "SELECT a.id,a.user_id,a.category_id,a.annonce_type,a.title,a.description,a.price,a.currency,a.city,a.item_condition,CASE WHEN a.status='approved' AND a.date_expiration < CURDATE() THEN 'expired' ELSE a.status END AS status,a.created_at,a.date_publication,a.date_expiration,c.name AS category,c.slug AS category_slug,u.full_name AS seller FROM annonce a JOIN categories c ON c.id=a.category_id JOIN users u ON u.id=a.user_id WHERE ".implode(' AND ',$where).' ORDER BY '.$sort.' LIMIT 100';
         $stmt=$pdo->prepare($sql); $stmt->execute($params); $items=$stmt->fetchAll();
-        foreach ($items as &$item) $item['images']=rowImages($pdo,(int)$item['id']); unset($item);
+        $items=attachListingImages($pdo,$items);
         respond(['listings'=>$items]);
     }
     if ($resource === 'listings' && $method === 'GET' && $id && $sub === '') {
@@ -195,11 +195,25 @@ try {
             respond(['listing'=>listing($pdo,(int)$duplicateId),'duplicate'=>true],200);
         }
         $uploadedPublicIds = [];
+        $imageRows = [];
         $uploadTransactionOpen = true;
+        foreach ($uploads as $position => $file) {
+            $imageRow = saveImage($file, $position, $uploadedPublicIds);
+            if ($imageRow !== null) $imageRows[] = $imageRow;
+        }
         $pdo->beginTransaction();
         $q=$pdo->prepare('INSERT INTO annonce (user_id,category_id,annonce_type,title,description,price,city,item_condition,date_publication,date_expiration) VALUES (?,?,?,?,?,?,?,?,CURDATE(),calculer_date_expiration(CURDATE()))');
         $q->execute([$current['id'],$categoryId,$type,$title,$description,$price,$city,$condition]); $newId=(int)$pdo->lastInsertId();
-        foreach ($uploads as $position => $file) saveImage($pdo,$newId,$file,$position,$uploadedPublicIds);
+        if ($imageRows) {
+            $imageValues = [];
+            $imageParams = [];
+            foreach ($imageRows as $imageRow) {
+                $imageValues[] = '(?,?,?,?)';
+                array_push($imageParams, $newId, $imageRow['cloudinary_public_id'], $imageRow['image_url'], $imageRow['position']);
+            }
+            $imageInsert = $pdo->prepare('INSERT INTO annonce_images (annonce_id,cloudinary_public_id,image_url,position) VALUES ' . implode(',', $imageValues));
+            $imageInsert->execute($imageParams);
+        }
         $pdo->commit();
         $uploadTransactionOpen = false;
         $releaseStmt=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $releaseStmt->execute([$listingSubmissionLock]); $releaseStmt->closeCursor(); $listingSubmissionLock=null;
@@ -241,12 +255,12 @@ try {
         $values[]=$id; $q=$pdo->prepare('UPDATE annonce SET '.implode(',',$set).", status='pending' WHERE id=?"); $q->execute($values); respond(['listing'=>listing($pdo,$id)]);
     }
     if ($resource === 'me' && $sub === 'listings' && $method === 'GET') {
-        $current=requireUser(); $stmt=$pdo->prepare('SELECT id FROM annonce WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]); $items=[];
-        foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) $items[]=listing($pdo,(int)$adId); respond(['listings'=>$items]);
+        $current=requireUser(); $stmt=$pdo->prepare('SELECT id FROM annonce WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]);
+        respond(['listings'=>listingsByIds($pdo,$stmt->fetchAll(PDO::FETCH_COLUMN))]);
     }
     if ($resource === 'favorites' && $method === 'GET') {
-        $current=requireUser(); $stmt=$pdo->prepare('SELECT annonce_id FROM favorites WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]); $items=[];
-        foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) { $item=listing($pdo,(int)$adId); if($item) $items[]=$item; } respond(['listings'=>$items]);
+        $current=requireUser(); $stmt=$pdo->prepare('SELECT annonce_id FROM favorites WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]);
+        respond(['listings'=>listingsByIds($pdo,$stmt->fetchAll(PDO::FETCH_COLUMN))]);
     }
     if ($resource === 'favorites' && $id && $method === 'POST') { $current=requireUser(); requireCsrf(); $stmt=$pdo->prepare('INSERT IGNORE INTO favorites (user_id,annonce_id) SELECT ?,id FROM annonce WHERE id=? AND status=\'approved\' AND (date_expiration IS NULL OR date_expiration>=CURDATE())'); $stmt->execute([$current['id'],$id]); respond(['ok'=>true],201); }
     if ($resource === 'favorites' && $id && $method === 'DELETE') { $current=requireUser(); requireCsrf(); $stmt=$pdo->prepare('DELETE FROM favorites WHERE user_id=? AND annonce_id=?'); $stmt->execute([$current['id'],$id]); respond(['ok'=>true]); }
@@ -256,13 +270,28 @@ try {
 
     if ($resource === 'conversations' && $method === 'GET' && !$id) { $current=requireUser(); $stmt=$pdo->prepare('SELECT c.id,c.annonce_id,c.buyer_id,c.seller_id,c.updated_at,a.title,bu.full_name AS buyer, su.full_name AS seller FROM conversations c JOIN annonce a ON a.id=c.annonce_id JOIN users bu ON bu.id=c.buyer_id JOIN users su ON su.id=c.seller_id WHERE c.buyer_id=? OR c.seller_id=? ORDER BY c.updated_at DESC'); $stmt->execute([$current['id'],$current['id']]); respond(['conversations'=>$stmt->fetchAll()]); }
     if ($resource === 'conversations' && $method === 'POST' && !$id) { $current=requireUser(); requireCsrf(); $data=input(); $adId=(int)($data['annonce_id']??0); $item=listing($pdo,$adId); if(!$item||$item['status']!=='approved') respond(['error'=>'Listing is not available.'],404); if((int)$item['user_id']===(int)$current['id']) respond(['error'=>'You cannot contact yourself.'],422); $stmt=$pdo->prepare('INSERT INTO conversations (annonce_id,buyer_id,seller_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)'); $stmt->execute([$adId,$current['id'],$item['user_id']]); respond(['conversation_id'=>(int)$pdo->lastInsertId()],201); }
-    if ($resource === 'conversations' && $id && $sub === 'messages' && $method === 'GET') { $current=requireUser(); $stmt=$pdo->prepare('SELECT id FROM conversations WHERE id=? AND (buyer_id=? OR seller_id=?)'); $stmt->execute([$id,$current['id'],$current['id']]); if(!$stmt->fetchColumn()) respond(['error'=>'Conversation not found.'],404); $stmt=$pdo->prepare('SELECT m.id,m.sender_id,m.message_text,m.is_read,m.created_at,u.full_name AS sender FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.conversation_id=? ORDER BY m.created_at'); $stmt->execute([$id]); respond(['messages'=>$stmt->fetchAll()]); }
-    if ($resource === 'conversations' && $id && $sub === 'messages' && $method === 'POST') { $current=requireUser(); requireCsrf(); $data=input(); $text=trim((string)($data['message']??'')); if($text===''||mb_strlen($text)>5000) respond(['error'=>'Message must contain 1 to 5000 characters.'],422); $stmt=$pdo->prepare('SELECT id FROM conversations WHERE id=? AND (buyer_id=? OR seller_id=?)'); $stmt->execute([$id,$current['id'],$current['id']]); if(!$stmt->fetchColumn()) respond(['error'=>'Conversation not found.'],404); $stmt=$pdo->prepare('INSERT INTO messages (conversation_id,sender_id,message_text) VALUES (?,?,?)'); $stmt->execute([$id,$current['id'],$text]); respond(['id'=>(int)$pdo->lastInsertId()],201); }
+    if ($resource === 'conversations' && $id && $sub === 'messages' && $method === 'GET') {
+        $current=requireUser();
+        $stmt=$pdo->prepare('SELECT c.id AS conversation_exists,m.id,m.sender_id,m.message_text,m.is_read,m.created_at,u.full_name AS sender FROM conversations c LEFT JOIN messages m ON m.conversation_id=c.id LEFT JOIN users u ON u.id=m.sender_id WHERE c.id=? AND (c.buyer_id=? OR c.seller_id=?) ORDER BY m.created_at,m.id');
+        $stmt->execute([$id,$current['id'],$current['id']]); $rows=$stmt->fetchAll(); $stmt->closeCursor();
+        if(!$rows) respond(['error'=>'Conversation not found.'],404);
+        $messages=[];
+        foreach($rows as $row) if($row['id']!==null) { unset($row['conversation_exists']); $messages[]=$row; }
+        respond(['messages'=>$messages]);
+    }
+    if ($resource === 'conversations' && $id && $sub === 'messages' && $method === 'POST') {
+        $current=requireUser(); requireCsrf(); $data=input(); $text=trim((string)($data['message']??''));
+        if($text===''||mb_strlen($text)>5000) respond(['error'=>'Message must contain 1 to 5000 characters.'],422);
+        $stmt=$pdo->prepare('INSERT INTO messages (conversation_id,sender_id,message_text) SELECT c.id,?,? FROM conversations c WHERE c.id=? AND (c.buyer_id=? OR c.seller_id=?)');
+        $stmt->execute([$current['id'],$text,$id,$current['id'],$current['id']]);
+        if($stmt->rowCount()===0) respond(['error'=>'Conversation not found.'],404);
+        respond(['id'=>(int)$pdo->lastInsertId(),'sender_id'=>(int)$current['id'],'message_text'=>$text],201);
+    }
 
     if ($resource === 'alerts' && $method === 'GET') { $current=requireUser(); $stmt=$pdo->prepare('SELECT id,search_query,city,max_price,category_id,is_active,created_at FROM search_alerts WHERE user_id=? ORDER BY created_at DESC'); $stmt->execute([$current['id']]); respond(['alerts'=>$stmt->fetchAll()]); }
     if ($resource === 'alerts' && $method === 'POST') { $current=requireUser(); requireCsrf(); $data=input(); $query=trim((string)($data['query']??'')); if($query===''||mb_strlen($query)>255) respond(['error'=>'Enter a search up to 255 characters.'],422); $stmt=$pdo->prepare('INSERT INTO search_alerts (user_id,search_query,city,max_price,category_id) VALUES (?,?,?,?,?)'); $stmt->execute([$current['id'],$query,trim((string)($data['city']??''))?:null,$data['max_price']??null,$data['category_id']??null]); respond(['id'=>(int)$pdo->lastInsertId()],201); }
 
-    if ($resource === 'admin' && $sub === 'listings' && $method === 'GET') { $current=requireUser(); requireAdmin($current); $status=$_GET['status']??'pending'; if($status==='all') { $stmt=$pdo->query('SELECT id FROM annonce ORDER BY created_at DESC LIMIT 100'); } else { if(!in_array($status,['pending','approved','rejected','sold','archived','expired'],true)) respond(['error'=>'Invalid status filter.'],422); if($status==='expired') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='expired' OR (status='approved' AND date_expiration<CURDATE()) ORDER BY created_at DESC LIMIT 100"); } elseif($status==='approved') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='approved' AND (date_expiration IS NULL OR date_expiration>=CURDATE()) ORDER BY created_at DESC LIMIT 100"); } else { $stmt=$pdo->prepare('SELECT id FROM annonce WHERE status=? ORDER BY created_at DESC LIMIT 100'); $stmt->execute([$status]); } } $items=[]; foreach($stmt->fetchAll(PDO::FETCH_COLUMN) as $adId) $items[]=listing($pdo,(int)$adId); respond(['listings'=>$items]); }
+    if ($resource === 'admin' && $sub === 'listings' && $method === 'GET') { $current=requireUser(); requireAdmin($current); $status=$_GET['status']??'pending'; if($status==='all') { $stmt=$pdo->query('SELECT id FROM annonce ORDER BY created_at DESC LIMIT 100'); } else { if(!in_array($status,['pending','approved','rejected','sold','archived','expired'],true)) respond(['error'=>'Invalid status filter.'],422); if($status==='expired') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='expired' OR (status='approved' AND date_expiration<CURDATE()) ORDER BY created_at DESC LIMIT 100"); } elseif($status==='approved') { $stmt=$pdo->query("SELECT id FROM annonce WHERE status='approved' AND (date_expiration IS NULL OR date_expiration>=CURDATE()) ORDER BY created_at DESC LIMIT 100"); } else { $stmt=$pdo->prepare('SELECT id FROM annonce WHERE status=? ORDER BY created_at DESC LIMIT 100'); $stmt->execute([$status]); } } respond(['listings'=>listingsByIds($pdo,$stmt->fetchAll(PDO::FETCH_COLUMN))]); }
     if ($resource === 'admin' && $sub === 'listings' && $id && $method === 'PATCH') {
         $current=requireUser(); requireAdmin($current); requireCsrf(); $data=input(); $status=$data['status']??'';
         if(!in_array($status,['approved','rejected'],true)) respond(['error'=>'Status must be approved or rejected.'],422);
@@ -277,14 +306,12 @@ try {
 
     respond(['error'=>'Route not found.'],404);
 } catch (Throwable $e) {
-    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
-        $pdo->rollBack();
-        if (!empty($uploadTransactionOpen)) {
-            foreach (($uploadedPublicIds ?? []) as $publicId) {
-                try { cloudinary()->uploadApi()->destroy($publicId, ['resource_type' => 'image']); }
-                catch (Throwable $cleanupError) {
-                    error_log('QuickAnnonces Cloudinary cleanup failed: ' . get_class($cleanupError) . ': ' . $cleanupError->getMessage());
-                }
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+    if (!empty($uploadTransactionOpen)) {
+        foreach (($uploadedPublicIds ?? []) as $publicId) {
+            try { cloudinary()->uploadApi()->destroy($publicId, ['resource_type' => 'image']); }
+            catch (Throwable $cleanupError) {
+                error_log('QuickAnnonces Cloudinary cleanup failed: ' . get_class($cleanupError) . ': ' . $cleanupError->getMessage());
             }
         }
     }
