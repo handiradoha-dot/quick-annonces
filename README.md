@@ -16,6 +16,8 @@ For an existing Aiven installation, `quickannonces_expiration_functions.sql` rem
 
 The sample announcement data is in `quickannonces_seed_annonces.sql`. It targets the existing `defaultdb`, uses the updated `youssef.benali@gmail.com` and `salma.elidrissi@gmail.com` accounts, and safely skips rows already present. Run this file only after those accounts and the `vehicules`, `velo`, and `informatique-pc` categories exist. Its inserts use the database triggers for publication dates and archiving.
 
+The previously completed cleanup of sample rows `annonce.id` 34–36 and `categories.id` 8–10 is recorded in `quickannonces_cleanup_test_rows.sql`. It deletes reviews first, verifies the IDs are absent and reports the user count, then commits. This is a one-time maintenance script for the existing `defaultdb`, not part of new database setup.
+
 The expiration feature requires `date_publication` and `date_expiration` columns, an `expired` value in the `annonce.status` enum, and the `calculer_date_expiration` function and `desactiver_annonces_expirees` procedure. Do not rerun the migration blindly: it adds columns and drops/recreates routines. Check the target database first:
 
 ```sql

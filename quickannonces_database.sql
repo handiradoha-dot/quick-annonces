@@ -349,3 +349,6 @@ WHERE LOWER(city) = 'tanger';
 
 -- Verify that all tables were created:
 SHOW TABLES;
+
+-- The one-time Aiven cleanup of test announcement/category IDs 34-36 and 8-10
+-- is documented separately in quickannonces_cleanup_test_rows.sql.
